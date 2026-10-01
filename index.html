@@ -1,0 +1,3044 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>LifeHub 1.0.21</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LifeHub">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Sarabun & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Leaflet.js for Interactive GPS Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- JSZip: read Strava bulk-export ZIP directly in the browser -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <!-- Firebase App & Firestore SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body {
+      font-family: 'Sarabun', 'Inter', sans-serif;
+      background-color: #090d14;
+      color: #f1f5f9;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar { display: none; }
+    .custom-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 20px); }
+    /* Leaflet Dark Map customization */
+    .leaflet-container {
+      background-color: #090d14 !important;
+      border-radius: 1.25rem;
+    }
+    .leaflet-bar {
+      border: 1px solid #1e293b !important;
+      box-shadow: none !important;
+    }
+    .leaflet-bar a {
+      background-color: #121824 !important;
+      color: #f1f5f9 !important;
+      border-bottom: 1px solid #1e293b !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center select-none pb-28">
+
+  <!-- Toast Notification แจ้งเตือนสถานะ -->
+  <div id="toastNotification" class="fixed top-5 z-50 transform -translate-y-20 opacity-0 transition-all duration-300 pointer-events-none px-4 py-2.5 rounded-2xl bg-emerald-500 text-[#090d14] font-bold text-xs shadow-2xl flex items-center gap-2">
+    <i data-lucide="check-circle" class="w-4 h-4"></i>
+    <span id="toastMsg">บันทึกข้อมูลเรียบร้อย</span>
+  </div>
+
+  <div class="w-full max-w-xl flex flex-col gap-5 px-4 pt-4 sm:pt-6">
+
+    <!-- Header สถานะและวันที่ปัจจุบัน พร้อมสถานะ Cloud Sync -->
+    <header class="flex items-center justify-between pb-1">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-bold tracking-wider text-[#6ee7b7] uppercase">LifeHub OS</span>
+          <span class="text-slate-700">•</span>
+          <span id="headerSectionTitle" class="text-xs font-medium text-slate-400">ตารางซ้อมวิ่ง & กีฬา</span>
+        </div>
+        <p id="currentDateText" class="text-base sm:text-lg font-bold text-white mt-0.5">กำลังโหลดวันที่...</p>
+      </div>
+
+      <!-- สถานะ Cloud Sync เรียลไทม์ -->
+      <div id="cloudStatusBadge" class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/50 text-emerald-400 border border-emerald-500/30 shadow-sm shadow-emerald-500/10 transition-all">
+        <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="cloudStatusText">เชื่อมต่อ Cloud แล้ว</span>
+      </div>
+    </header>
+
+    <!-- ======================================================== -->
+    <!-- แท็บที่ 1: งานประจำวัน (Tasks & Operations)               -->
+    <!-- ======================================================== -->
+    <main id="section-tasks" class="hidden flex flex-col gap-5">
+      <!-- กิจวัตรประจำวัน -->
+      <section class="bg-[#121824] border border-[#1e293b] rounded-3xl p-5 shadow-lg">
+        <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+          <div class="flex items-center gap-2">
+            <i data-lucide="sun-medium" class="w-5 h-5 text-amber-400"></i>
+            <h2 class="text-base font-bold text-white">กิจวัตรประจำวัน (Daily Routine)</h2>
+          </div>
+          <button onclick="openModal('modalRoutine')" class="text-xs font-bold text-[#6ee7b7] hover:underline flex items-center gap-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>เพิ่ม</span>
+          </button>
+        </div>
+        <div id="dailyChecklistContainer" class="flex flex-col gap-2 mt-3.5"></div>
+      </section>
+
+      <!-- สิ่งที่ต้องทำ To-Do List -->
+      <section class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i data-lucide="check-circle-2" class="w-5 h-5 text-[#6ee7b7]"></i>
+            <span>สิ่งที่ต้องทำ (To-Do List)</span>
+          </h2>
+          <span id="todoPendingBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-[#1e293b] text-slate-300 font-medium">0 ค้างอยู่</span>
+        </div>
+
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs custom-scroll">
+          <div id="todoCategoryTabsContainer" class="flex items-center gap-2"></div>
+          <button onclick="openCategoryModal()" class="flex items-center gap-1 px-3 py-2 rounded-xl bg-[#1e293b] hover:bg-[#2d3b4f] text-slate-300 font-medium border border-[#334155] flex-shrink-0 transition">
+            <i data-lucide="settings-2" class="w-3.5 h-3.5"></i>
+            <span>จัดการแท็บ</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input id="newTodoInput" type="text" placeholder="พิมพ์สิ่งที่ต้องทำในหมวดนี้..." class="w-full bg-[#121824] border border-[#1e293b] rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-slate-400 transition">
+          <button onclick="addNewTodo()" class="bg-[#6ee7b7] hover:bg-[#5eead4] active:scale-95 text-[#090d14] px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1 flex-shrink-0 transition shadow">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>เพิ่ม</span>
+          </button>
+        </div>
+
+        <div id="todoListContainer" class="flex flex-col gap-2 mt-1"></div>
+      </section>
+    </main>
+
+    <!-- ======================================================== -->
+    <!-- แท็บที่ 2: วิ่งและออกกำลังกาย (Running & Training)         -->
+    <!-- ======================================================== -->
+    <main id="section-running" class="flex flex-col gap-5">
+      
+      <!-- 1. Countdown งานวิ่งเป้าหมาย -->
+      <section class="bg-gradient-to-br from-[#121824] via-[#162030] to-[#121824] border border-[#1e293b] rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
+        <div class="flex items-start justify-between">
+          <div class="flex flex-col min-w-0 pr-2">
+            <span class="text-[11px] font-bold text-[#6ee7b7] tracking-wider uppercase flex items-center gap-1.5">
+              <i data-lucide="flag" class="w-3.5 h-3.5"></i>
+              <span>Next Target Race</span>
+            </span>
+            <h3 id="raceDisplayTitle" class="text-lg sm:text-xl font-extrabold text-white mt-1 truncate">ชื่องานวิ่ง</h3>
+            <p id="raceDisplaySub" class="text-xs text-slate-400 mt-0.5 font-medium">วันที่แข่ง • ระยะทาง</p>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button onclick="openRaceModal()" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition" title="แก้ไขข้อมูลงานวิ่ง">
+              <i data-lucide="pencil" class="w-4 h-4"></i>
+            </button>
+            <div class="flex flex-col items-center justify-center bg-amber-400/10 border border-amber-400/30 px-3.5 py-2 rounded-2xl">
+              <span class="text-[11px] text-amber-300 font-medium">อีกเพียง</span>
+              <span id="raceDaysCountdown" class="text-2xl font-black text-amber-400 font-['Inter']">0</span>
+              <span class="text-[10px] text-amber-300 font-light">วัน</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-[#1e293b]">
+          <div class="flex flex-col">
+            <span class="text-[11px] text-slate-400">เป้าหมาย Pace</span>
+            <span id="raceTargetPaceText" class="text-sm sm:text-base font-bold text-white font-['Inter'] mt-0.5">-</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-[11px] text-slate-400">เป้าหมายเวลาจบ</span>
+            <span id="raceTargetTimeText" class="text-sm sm:text-base font-bold text-white font-['Inter'] mt-0.5">-</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. ตารางซ้อมวันนี้ (Today Focus) + ปุ่มดูทั้งหมด -->
+      <section class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="flame" class="w-5 h-5 text-amber-400"></i>
+            <h2 class="text-base font-bold text-white">การซ้อมวันนี้ (Today)</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="toggleAllTrainingView()" id="btnToggleAllTraining" class="flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-[#162030] hover:bg-[#1f2c42] border border-[#223147] px-3 py-1.5 rounded-xl transition">
+              <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-[#6ee7b7]"></i>
+              <span id="textToggleAllTraining">ดูตารางทั้งหมด</span>
+            </button>
+            <button onclick="openAddTrainingModal()" class="flex items-center gap-1 text-xs font-bold bg-[#6ee7b7] text-[#090d14] px-3 py-1.5 rounded-xl hover:bg-[#5eead4] transition shadow">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>เพิ่ม</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="todayTrainingCardContainer"></div>
+
+        <div id="allTrainingPlanWrapper" class="hidden flex flex-col gap-2.5 pt-2 border-t border-[#1e293b]">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-xs font-bold text-slate-400">ตารางซ้อมตลอดทั้งสัปดาห์</span>
+            <span class="text-[11px] text-slate-500">เรียงตามวันและวันที่จริง</span>
+          </div>
+          <div id="weeklyPlanContainer" class="flex flex-col gap-2.5"></div>
+        </div>
+      </section>
+
+      <!-- 3. นำเข้ากิจกรรมจากไฟล์ Strava โดยตรง -->
+      <section class="bg-gradient-to-r from-orange-950/40 via-[#121824] to-[#121824] border border-orange-500/40 rounded-3xl p-4 shadow-lg">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-orange-400 flex-shrink-0">
+              <i data-lucide="download" class="w-5 h-5"></i>
+            </div>
+            <div class="min-w-0">
+              <h3 class="text-xs sm:text-sm font-bold text-white">นำเข้ากิจกรรมวิ่ง</h3>
+              <p class="text-[11px] text-slate-400">ไม่ต้องเชื่อมต่อ Strava • ข้อมูลอ่านจากไฟล์ในเครื่อง</p>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <label for="stravaBulkZipInput" class="cursor-pointer bg-[#fc4c02] hover:bg-[#e94400] active:scale-[.98] text-white px-3 py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-lg shadow-orange-950/30">
+            <i data-lucide="archive" class="w-4 h-4"></i>
+            <span>นำเข้า Strava ทั้งหมด</span>
+          </label>
+          <label for="gpxFileInput" class="cursor-pointer bg-slate-800 hover:bg-slate-700 active:scale-[.98] text-slate-100 px-3 py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition border border-slate-700">
+            <i data-lucide="file-up" class="w-4 h-4"></i>
+            <span>อัปโหลดกิจกรรม</span>
+          </label>
+        </div>
+        <input type="file" id="stravaBulkZipInput" accept=".zip,application/zip" class="hidden">
+        <input type="file" id="gpxFileInput" accept=".gpx,.tcx,.fit,.gz" class="hidden">
+        <p class="text-[10px] text-slate-500 mt-2 text-center">ทั้งหมด = ZIP จาก Strava • ทีละกิจกรรม = Export Original / TCX / GPX</p>
+      </section>
+
+      <!-- 4. ปฏิทินซ้อมวิ่ง & งานแข่ง -->
+      <section class="bg-[#121824] border border-[#1e293b] rounded-3xl p-5 shadow-lg flex flex-col gap-3">
+        <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+          <div class="flex items-center gap-2">
+            <i data-lucide="calendar" class="w-5 h-5 text-indigo-400"></i>
+            <h2 id="calendarMonthTitle" class="text-base font-bold text-white">ปฏิทินซ้อมวิ่ง</h2>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="prevMonth()" class="p-1.5 rounded-lg bg-[#090d14] border border-[#1e293b] text-slate-400 hover:text-white"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+            <button onclick="nextMonth()" class="p-1.5 rounded-lg bg-[#090d14] border border-[#1e293b] text-slate-400 hover:text-white"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-400 mb-1">
+          <span>อา.</span><span>จ.</span><span>อ.</span><span>พ.</span><span>พฤ.</span><span>ศ.</span><span>ส.</span>
+        </div>
+        <div id="calendarDaysGrid" class="grid grid-cols-7 gap-1.5"></div>
+
+        <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-[#1e293b]">
+          <div class="flex items-center gap-3">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> ซ้อมวิ่ง</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-400"></span> วันแข่งขัน</span>
+          </div>
+          <span id="calendarMonthlyKmSum">รวมเดือนนี้: <strong class="text-white font-['Inter']">0.00 กม.</strong></span>
+        </div>
+      </section>
+
+      <!-- 5. สถิติการวิ่ง / PB / Training Load -->
+      <section class="bg-[#121824] border border-[#1e293b] rounded-3xl p-5 shadow-lg flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2"><i data-lucide="chart-no-axes-combined" class="w-5 h-5 text-cyan-400"></i><span>สถิติการวิ่ง</span></h2>
+            <span class="text-[11px] text-slate-400">สรุปจากกิจกรรมที่บันทึกไว้ทั้งหมด</span>
+          </div>
+          <select id="statsPeriodSelect" onchange="renderRunStats()" class="bg-[#090d14] border border-[#1e293b] rounded-xl px-2.5 py-1.5 text-[10px] text-slate-300">
+            <option value="all">ทั้งหมด</option>
+          </select>
+        </div>
+        <div id="runStatsSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="bg-[#090d14] rounded-2xl border border-[#1e293b] p-3">
+            <div class="flex items-center justify-between mb-2"><span class="text-[10px] font-bold text-slate-400">PERSONAL BEST</span><span class="text-[9px] text-slate-600">จากข้อมูลที่มี</span></div>
+            <div id="personalBestContainer" class="grid grid-cols-2 gap-2"></div>
+          </div>
+          <div class="bg-[#090d14] rounded-2xl border border-[#1e293b] p-3">
+            <div class="flex items-center justify-between mb-2"><span class="text-[10px] font-bold text-slate-400">TRAINING LOAD</span><span id="trainingLoadWindow" class="text-[9px] text-slate-600">7 วัน</span></div>
+            <div id="trainingLoadContainer"></div>
+          </div>
+        </div>
+        <div class="bg-[#090d14] rounded-2xl border border-[#1e293b] p-3">
+          <div class="flex items-center justify-between mb-2"><span class="text-[10px] font-bold text-slate-400">ระยะวิ่ง 4 สัปดาห์ล่าสุด</span><span class="text-[9px] text-slate-600">กม.</span></div>
+          <div id="weeklyDistanceBars" class="grid grid-cols-4 gap-2 items-end h-28"></div>
+        </div>
+      </section>
+
+      <!-- 6. Shoe Mileage Tracker พร้อมรูปถ่ายรองเท้าจริง -->
+      <section class="bg-[#121824] border border-[#1e293b] rounded-3xl p-5 shadow-lg flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <i data-lucide="footprints" class="w-5 h-5 text-rose-400"></i>
+              <span>ระยะสะสมรองเท้า (Shoe Mileage)</span>
+            </h2>
+            <span class="text-[11px] text-slate-400">บันทึกรูปและติดตามอายุการใช้งาน (ทศนิยม 2 ตำแหน่ง)</span>
+          </div>
+          <button onclick="openAddShoeModal()" class="flex items-center gap-1 text-xs font-bold bg-[#6ee7b7] text-[#090d14] px-3 py-1.5 rounded-xl hover:bg-[#5eead4] transition shadow">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>เพิ่มรองเท้า</span>
+          </button>
+        </div>
+
+        <div id="shoeListContainer" class="flex flex-col gap-3.5"></div>
+      </section>
+    </main>
+
+    <!-- ======================================================== -->
+    <!-- แท็บที่ 3: การเงิน & ค่าสมาชิก (Finance & Subscriptions)   -->
+    <!-- ======================================================== -->
+    <main id="section-finance" class="hidden flex flex-col gap-5">
+      <section class="bg-[#121824] border border-[#1e293b] rounded-3xl p-6 relative overflow-hidden shadow-xl shadow-black/40">
+        <div class="flex flex-col gap-1 relative z-10">
+          <span class="text-sm font-medium text-slate-400">ยอดตัดเดือนนี้ (Subscriptions)</span>
+          <div class="flex items-baseline gap-1 mt-1">
+            <span class="text-3xl sm:text-4xl font-semibold text-slate-400">฿</span>
+            <span id="monthlyTotalText" class="text-5xl sm:text-6xl font-bold tracking-tight text-white font-['Inter']">0</span>
+          </div>
+          <p id="activeCountSummary" class="text-xs sm:text-sm text-slate-400 mt-2 font-light">0 รายการที่กำลังใช้งาน</p>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-2 gap-3 sm:gap-4">
+        <div class="bg-[#121824] border border-[#1e293b] rounded-2xl p-4 flex flex-col justify-between">
+          <span class="text-xs text-slate-400 font-medium">ประมาณการต่อปี</span>
+          <div class="flex items-baseline gap-1 mt-2">
+            <span class="text-lg font-semibold text-slate-400">฿</span>
+            <span id="yearlyEstimateText" class="text-2xl font-bold text-white font-['Inter']">0</span>
+          </div>
+        </div>
+        <div class="bg-[#121824] border border-[#1e293b] rounded-2xl p-4 flex flex-col justify-between">
+          <span class="text-xs text-slate-400 font-medium">จ่ายด่วนวันนี้</span>
+          <div class="flex items-baseline gap-1 mt-2">
+            <span class="text-lg font-semibold text-slate-400">฿</span>
+            <span id="todayExpenseTotal" class="text-2xl font-bold text-emerald-400 font-['Inter']">0</span>
+          </div>
+        </div>
+      </div>
+
+      <section class="bg-[#121824] border border-[#1e293b] rounded-3xl p-5 shadow-lg">
+        <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <i data-lucide="receipt" class="w-4 h-4 text-emerald-400"></i>
+            <span>จดรายจ่ายด่วนวันนี้ (Quick Log)</span>
+          </h3>
+          <span class="text-xs text-slate-400">เดือนนี้รวม: <strong id="monthExpenseTotal" class="text-white font-['Inter']">฿0</strong></span>
+        </div>
+
+        <form id="quickExpenseForm" class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3.5">
+          <input id="expName" type="text" required placeholder="ชื่อรายการ (เช่น ข้าวกลางวัน)" class="bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none">
+          <input id="expAmount" type="number" step="any" required placeholder="ยอดเงิน (บาท)" class="bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none font-['Inter']">
+          <div class="flex gap-2">
+            <select id="expCategory" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none">
+              <option value="อาหาร">🍔 อาหาร/เครื่องดื่ม</option>
+              <option value="เดินทาง">🚗 เดินทาง/น้ำมัน</option>
+              <option value="ธุรกิจ">📦 สต็อก/ธุรกิจ</option>
+              <option value="ส่วนตัว">✨ ส่วนตัว/อื่นๆ</option>
+            </select>
+            <button type="submit" class="bg-[#6ee7b7] hover:bg-[#5eead4] active:scale-95 text-[#090d14] px-3.5 rounded-xl font-bold text-xs flex items-center justify-center flex-shrink-0">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </form>
+
+        <div id="recentExpenseList" class="flex flex-col gap-1.5 mt-3 pt-3 border-t border-[#1e293b]"></div>
+      </section>
+
+      <section class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i data-lucide="layers" class="w-5 h-5 text-indigo-400"></i>
+            <span>รายการสมาชิกทั้งหมด</span>
+          </h2>
+          <button onclick="openModal('modalSub')" class="flex items-center gap-1.5 bg-[#6ee7b7] hover:bg-[#5eead4] active:scale-95 transition text-[#090d14] px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-md">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>เพิ่มรายการ</span>
+          </button>
+        </div>
+        <div id="subsList" class="flex flex-col gap-2.5"></div>
+      </section>
+    </main>
+
+    <!-- ระบบจัดการและสำรองข้อมูล -->
+    <footer class="mt-4 p-5 rounded-3xl bg-[#121824] border border-[#1e293b] flex flex-col gap-3 shadow-lg">
+      <div class="flex items-center justify-between border-b border-[#1e293b] pb-2.5">
+        <div class="flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-[#6ee7b7]"></i>
+          <span class="text-xs font-bold text-white">ระบบจัดการและสำรองข้อมูล (Data Safety)</span>
+        </div>
+        <span class="text-[10px] text-slate-400">ปลอดภัย 100%</span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="exportBackupData()" class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#090d14] border border-[#1e293b] text-slate-300 hover:text-white hover:border-slate-500 text-xs font-semibold transition">
+          <i data-lucide="download" class="w-3.5 h-3.5 text-indigo-400"></i>
+          <span>ดาวน์โหลด Backup</span>
+        </button>
+
+        <label for="importBackupInput" class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#090d14] border border-[#1e293b] text-slate-300 hover:text-white hover:border-slate-500 text-xs font-semibold cursor-pointer transition">
+          <i data-lucide="upload" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>กู้คืนข้อมูล (Restore)</span>
+        </label>
+        <input type="file" id="importBackupInput" accept=".json" class="hidden">
+      </div>
+
+      <button onclick="forceMigrateLocalToCloud()" class="w-full py-2 px-3 rounded-xl bg-[#162030] hover:bg-[#1f2c42] border border-[#223147] text-emerald-400 hover:text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 transition">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+        <span>ส่งข้อมูลในเครื่องนี้ขึ้น Cloud ทันที (Force Push Local Data)</span>
+      </button>
+    </footer>
+
+  </div>
+
+  <!-- แถบนำทางด้านล่าง -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-[#090d14]/90 backdrop-blur-xl border-t border-[#1e293b] z-40 safe-bottom">
+    <div class="max-w-md mx-auto grid grid-cols-3 h-16">
+      <button onclick="switchMainTab('tasks')" id="nav-btn-tasks" class="nav-item flex flex-col items-center justify-center gap-1 text-slate-500 transition hover:text-slate-300">
+        <i data-lucide="check-square" class="w-5 h-5"></i>
+        <span class="text-[11px] font-medium">งานประจำวัน</span>
+      </button>
+
+      <button onclick="switchMainTab('running')" id="nav-btn-running" class="nav-item flex flex-col items-center justify-center gap-1 text-[#6ee7b7] font-bold transition">
+        <i data-lucide="flame" class="w-5 h-5"></i>
+        <span class="text-[11px]">ซ้อมวิ่ง</span>
+      </button>
+
+      <button onclick="switchMainTab('finance')" id="nav-btn-finance" class="nav-item flex flex-col items-center justify-center gap-1 text-slate-500 transition hover:text-slate-300">
+        <i data-lucide="wallet" class="w-5 h-5"></i>
+        <span class="text-[11px] font-medium">การเงิน</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ======================================================== -->
+  <!-- MODALS                                                   -->
+  <!-- ======================================================== -->
+
+  <!-- Modal สรุปผลกิจกรรมจากไฟล์ พร้อมแผนที่และ Splits -->
+  <div id="modalGpxResult" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-lg rounded-3xl p-5 sm:p-6 shadow-2xl overflow-y-auto max-h-[92vh] flex flex-col gap-4">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <div class="flex items-center gap-2">
+          <i data-lucide="map" class="w-5 h-5 text-orange-400"></i>
+          <div class="min-w-0">
+            <h3 class="text-base font-bold text-white truncate" id="gpxActivityTitle">ผลการวิ่งจากไฟล์</h3>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-[11px] text-slate-400" id="gpxActivityDateTime">-</span>
+              <span id="gpxSourceBadge" class="hidden text-[9px] px-1.5 py-0.5 rounded-full bg-orange-500/10 text-orange-300 border border-orange-500/20">ไฟล์</span>
+            </div>
+          </div>
+        </div>
+        <button onclick="closeModal('modalGpxResult')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- 5. Interactive GPS Route Map (Leaflet) -->
+      <div class="relative w-full h-52 sm:h-60 rounded-2xl overflow-hidden border border-[#1e293b] shadow-inner bg-[#090d14]">
+        <div id="gpxMapContainer" class="w-full h-full"></div>
+      </div>
+
+      <!-- 1, 2, 3. สถิติหลัก 3 ตัว -->
+      <div class="grid grid-cols-3 gap-2">
+        <div class="bg-[#090d14] p-3 rounded-2xl border border-[#1e293b] flex flex-col items-center justify-center text-center">
+          <span class="text-[11px] text-slate-400">ระยะทาง</span>
+          <span id="gpxStatDistance" class="text-lg sm:text-xl font-black text-emerald-400 font-['Inter'] mt-0.5">0.00</span>
+          <span class="text-[10px] text-slate-500">กิโลเมตร</span>
+        </div>
+        <div class="bg-[#090d14] p-3 rounded-2xl border border-[#1e293b] flex flex-col items-center justify-center text-center">
+          <span class="text-[11px] text-slate-400">เวลาเคลื่อนที่</span>
+          <span id="gpxStatDuration" class="text-lg sm:text-xl font-black text-white font-['Inter'] mt-0.5">00:00:00</span>
+          <span class="text-[10px] text-slate-500">ชั่วโมง:นาที</span>
+        </div>
+        <div class="bg-[#090d14] p-3 rounded-2xl border border-[#1e293b] flex flex-col items-center justify-center text-center">
+          <span class="text-[11px] text-slate-400">เพซเฉลี่ย</span>
+          <span id="gpxStatPace" class="text-lg sm:text-xl font-black text-amber-400 font-['Inter'] mt-0.5">0'00"</span>
+          <span class="text-[10px] text-slate-500">/กม.</span>
+        </div>
+      </div>
+
+      <!-- 6. ผลลัพธ์ / สถิติ Best Efforts (สถิติระยะที่วิ่งได้) -->
+      <div class="p-3 bg-[#090d14] rounded-2xl border border-indigo-500/30 flex flex-col gap-2">
+        <span class="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+          <i data-lucide="award" class="w-3.5 h-3.5"></i>
+          <span>สถิติที่ดีที่สุด (Best Efforts ในกิจกรรมนี้)</span>
+        </span>
+        <div class="grid grid-cols-2 gap-2 text-xs" id="gpxBestEffortsContainer"></div>
+      </div>
+
+      <!-- 4. ช่วง / ข้อมูลย่อยแต่ละกิโลเมตร (Splits) -->
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-300 flex items-center gap-1">
+            <i data-lucide="list-ordered" class="w-3.5 h-3.5 text-slate-400"></i>
+            <span>สถิติย่อยแต่ละกิโลเมตร (Splits)</span>
+          </span>
+        </div>
+        <div class="bg-[#090d14] rounded-2xl border border-[#1e293b] overflow-hidden max-h-40 overflow-y-auto custom-scroll">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-[#162030] text-slate-400 text-[10px] uppercase font-mono border-b border-[#1e293b]">
+              <tr>
+                <th class="py-1.5 px-3">กม.</th>
+                <th class="py-1.5 px-3">เวลา</th>
+                <th class="py-1.5 px-3">กราฟ</th>
+                <th class="py-1.5 px-3">เพซ</th>
+              </tr>
+            </thead>
+            <tbody id="gpxSplitsTableBody" class="divide-y divide-[#1e293b] text-slate-300 font-mono text-[11px]"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- แก้วันที่ก่อนบันทึก -->
+      <div class="pt-2 border-t border-[#1e293b]">
+        <label class="block text-xs font-medium text-slate-400 mb-1.5">วันที่กิจกรรม</label>
+        <input id="gpxActivityDateInput" type="date" class="w-full sm:w-52 bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-500 font-['Inter']">
+      </div>
+
+      <!-- ส่วนเลือกรองเท้าและเชื่อมโยงตารางซ้อม -->
+      <form id="gpxSaveForm" class="flex flex-col gap-3 pt-2 border-t border-[#1e293b]">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-emerald-400 mb-1">รองเท้าที่ใส่ซ้อม (บวกระยะสะสมอัตโนมัติ)</label>
+            <select id="gpxShoeSelect" class="w-full bg-[#090d14] border border-emerald-500/40 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-indigo-400 mb-1">เชื่อมโยงตารางซ้อมสัปดาห์นี้</label>
+            <select id="gpxTrainingSelect" class="w-full bg-[#090d14] border border-indigo-500/40 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none">
+              <option value="">-- ไม่เชื่อมโยง (บันทึกอิสระ) --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modalGpxResult')" class="px-4 py-2 text-slate-400 text-xs">ยกเลิก</button>
+          <button type="submit" class="px-5 py-2 bg-gradient-to-r from-emerald-400 to-teal-400 text-[#090d14] rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-lg">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>ยืนยันและบันทึกลงระบบ</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Modal บันทึกผลการวิ่งด่วนด้วยตนเอง (Manual Log) -->
+  <div id="modalManualRun" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-md rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <div class="flex items-center gap-2">
+          <i data-lucide="pen-tool" class="w-5 h-5 text-emerald-400"></i>
+          <h3 class="text-base font-bold text-white">บันทึกผลการวิ่ง</h3>
+        </div>
+        <button onclick="closeModal('modalManualRun')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <form id="manualRunForm" class="flex flex-col gap-3.5 mt-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">ชื่อกิจกรรม</label>
+          <input id="runInputTitle" type="text" required value="วิ่งออกกำลังกาย" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        </div>
+
+        <div class="p-3 bg-[#090d14] rounded-xl border border-indigo-500/30 flex flex-col gap-1.5">
+          <label class="block text-xs font-bold text-indigo-400">เชื่อมโยงกับตารางซ้อมหรือไม่?</label>
+          <select id="runLinkTrainingSelect" class="w-full bg-[#121824] border border-[#1e293b] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+            <option value="">-- ไม่เชื่อมโยง (บันทึกเป็นกิจกรรมอิสระ) --</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">วันที่วิ่ง</label>
+            <input id="runInputDate" type="date" required class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">ระยะทางจริง (กม.)</label>
+            <div class="flex items-center bg-[#090d14] border border-[#1e293b] rounded-xl overflow-hidden focus-within:border-slate-400">
+              <input id="runInputKm" type="number" step="0.01" required placeholder="0.00" class="w-full bg-transparent px-3 py-2 text-xs text-white focus:outline-none font-['Inter'] font-bold">
+              <span class="bg-[#1e293b] text-slate-400 px-2.5 py-2 text-xs font-semibold border-l border-[#1e293b]">กม.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">ระยะเวลาที่ใช้</label>
+            <input id="runInputDuration" type="text" placeholder="เช่น 00:34:00" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Pace เฉลี่ย</label>
+            <div class="flex items-center bg-[#090d14] border border-[#1e293b] rounded-xl overflow-hidden">
+              <input id="runInputPace" type="text" placeholder="เช่น 6'40&quot;" class="w-full bg-transparent px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+              <span class="bg-[#1e293b] text-slate-400 px-2 py-2 text-[10px] font-semibold border-l border-[#1e293b]">/กม.</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-emerald-400 mb-1">เลือกรองเท้าที่ใส่ซ้อม (บวกระยะสะสมอัตโนมัติ)</label>
+          <select id="runShoeSelect" class="w-full bg-[#090d14] border border-emerald-500/40 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"></select>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-[#1e293b]">
+          <button type="button" onclick="closeModal('modalManualRun')" class="px-4 py-2 text-slate-400 text-xs">ยกเลิก</button>
+          <button type="submit" class="px-5 py-2 bg-[#6ee7b7] text-[#090d14] rounded-xl font-bold text-xs flex items-center gap-1.5 shadow">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>ยืนยันและบันทึก</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Modal รองเท้าวิ่ง พร้อมรูปถ่าย -->
+  <div id="modalShoe" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-md rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[92vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <h3 id="shoeModalTitle" class="text-base font-bold text-white">เพิ่มรองเท้าวิ่ง</h3>
+        <button onclick="closeModal('modalShoe')" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <form id="shoeForm" class="flex flex-col gap-3.5 mt-4">
+        <input type="hidden" id="shoeEditId">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5">รูปถ่ายรองเท้า</label>
+          <div class="flex items-center gap-3">
+            <div id="shoeImgPreviewContainer" class="w-16 h-16 rounded-2xl bg-[#090d14] border border-[#1e293b] flex items-center justify-center overflow-hidden flex-shrink-0">
+              <i id="shoeDefaultIcon" data-lucide="footprints" class="w-6 h-6 text-slate-600"></i>
+              <img id="shoePreviewImg" class="w-full h-full object-cover hidden" alt="Shoe Preview">
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <label for="shoeImageFileInput" class="inline-flex items-center gap-1.5 bg-[#1e293b] hover:bg-[#2d3b4f] text-slate-200 px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition border border-slate-700">
+                <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                <span>อัปโหลดรูปภาพ</span>
+              </label>
+              <input id="shoeImageFileInput" type="file" accept="image/*" class="hidden">
+              <button type="button" id="removeShoeImgBtn" class="text-[11px] text-rose-400 hover:text-rose-300 text-left hidden">ลบรูปถ่าย</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">ชื่อรุ่นรองเท้า</label>
+          <input id="shoeName" type="text" required placeholder="เช่น Adidas Adios Pro 3" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">ระยะสะสมปัจจุบัน (กม.)</label>
+            <input id="shoeCurrentKm" type="number" step="0.01" required placeholder="0.00" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">เกณฑ์เตือนสูงสุด (กม.)</label>
+            <input id="shoeMaxKm" type="number" step="0.01" required value="600.00" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">ป้ายกำกับ / โน้ตสั้น</label>
+          <input id="shoeBadge" type="text" placeholder="เช่น รองเท้าแข่งหลัก" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        </div>
+        <div class="flex items-center justify-between pt-2">
+          <button type="button" id="deleteShoeBtn" class="hidden text-xs text-rose-400 hover:text-rose-300 font-semibold">ลบรองเท้าคู่นี้</button>
+          <div class="flex gap-2 ml-auto">
+            <button type="button" onclick="closeModal('modalShoe')" class="px-4 py-2 text-slate-400 text-xs">ยกเลิก</button>
+            <button type="submit" class="px-5 py-2 bg-[#6ee7b7] text-[#090d14] rounded-xl font-bold text-xs">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. Modal รายละเอียดวันในปฏิทิน & ลบกิจกรรม/งานแข่ง -->
+  <div id="modalDayDetail" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-2xl rounded-3xl p-4 sm:p-5 shadow-2xl overflow-y-auto max-h-[92vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <div>
+          <h3 id="dayDetailTitle" class="text-base font-bold text-white">บันทึกกิจกรรมประจำวัน</h3>
+          <p id="dayDetailSub" class="text-xs text-slate-400 mt-0.5">รายละเอียดการวิ่ง & การแข่งขัน</p>
+        </div>
+        <button onclick="closeModal('modalDayDetail')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div id="dayActivitiesList" class="flex flex-col gap-3 mt-4"></div>
+    </div>
+  </div>
+
+  <!-- 5. Modal แก้ไขกิจกรรมวิ่ง -->
+  <div id="modalEditActivity" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-md rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[92vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <div>
+          <h3 class="text-base font-bold text-white">แก้ไขกิจกรรมวิ่ง</h3>
+          <p id="editActivitySourceText" class="text-[10px] text-slate-500 mt-0.5"></p>
+        </div>
+        <button onclick="closeModal('modalEditActivity')" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <form id="editActivityForm" class="flex flex-col gap-3.5 mt-4">
+        <input type="hidden" id="editActivityId">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">ชื่อกิจกรรม</label>
+          <input id="editActivityTitle" type="text" required class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-xs font-medium text-slate-400 mb-1">วันที่</label><input id="editActivityDate" type="date" required class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"></div>
+          <div><label class="block text-xs font-medium text-slate-400 mb-1">ระยะทาง</label><input id="editActivityKm" type="number" step="0.01" min="0" required class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white font-['Inter'] focus:outline-none"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-xs font-medium text-slate-400 mb-1">เวลา</label><input id="editActivityTime" type="text" placeholder="00:45:00" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white font-['Inter'] focus:outline-none"></div>
+          <div><label class="block text-xs font-medium text-slate-400 mb-1">Pace</label><input id="editActivityPace" type="text" placeholder="6'30"" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white font-['Inter'] focus:outline-none"></div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div><label class="block text-xs font-medium text-slate-400 mb-1">HR</label><input id="editActivityHr" type="number" min="0" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-2 py-2 text-xs text-white font-['Inter'] focus:outline-none"></div>
+          <div><label class="block text-xs font-medium text-slate-400 mb-1">Calories</label><input id="editActivityCalories" type="number" min="0" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-2 py-2 text-xs text-white font-['Inter'] focus:outline-none"></div>
+        </div>
+        <div><label class="block text-xs font-medium text-emerald-400 mb-1">รองเท้า</label><select id="editActivityShoe" class="w-full bg-[#090d14] border border-emerald-500/40 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"></select></div>
+        <div><label class="block text-xs font-medium text-slate-400 mb-1">โน้ต</label><textarea id="editActivityNotes" rows="3" placeholder="เช่น วันนี้ขาหนัก / ฝนตก / วิ่งสบายมาก" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white resize-none focus:outline-none"></textarea></div>
+        <div class="flex justify-between items-center pt-2 border-t border-[#1e293b]">
+          <button type="button" id="deleteEditActivityBtn" class="px-3 py-2 text-rose-400 text-xs font-semibold hover:bg-rose-500/10 rounded-xl">ลบกิจกรรม</button>
+          <div class="flex gap-2">
+            <button type="button" onclick="closeModal('modalEditActivity')" class="px-4 py-2 text-slate-400 text-xs">ยกเลิก</button>
+            <button type="submit" class="px-5 py-2 bg-[#6ee7b7] text-[#090d14] rounded-xl font-bold text-xs">บันทึกการแก้ไข</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. Modal แก้ไขเป้าหมายงานแข่ง -->
+  <div id="modalRace" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-md rounded-3xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <h3 class="text-base font-bold text-white">แก้ไขเป้าหมายงานวิ่ง</h3>
+        <button onclick="closeModal('modalRace')" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <form id="raceForm" class="flex flex-col gap-4 mt-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">ชื่องานวิ่ง</label>
+          <input id="raceFormName" type="text" required class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-sm text-white focus:outline-none">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">วันแข่งขัน</label>
+            <input id="raceFormDate" type="date" required class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">ระยะทาง</label>
+            <div class="flex items-center bg-[#090d14] border border-[#1e293b] rounded-xl overflow-hidden">
+              <input id="raceFormDistanceNum" type="number" step="0.01" required placeholder="10.00" class="w-full bg-transparent px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+              <span class="bg-[#1e293b] text-slate-300 px-3 py-2 text-xs font-semibold border-l border-[#1e293b]">กม.</span>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">เป้าหมาย Pace</label>
+            <div class="flex items-center bg-[#090d14] border border-[#1e293b] rounded-xl overflow-hidden">
+              <input id="raceFormPaceNum" type="text" placeholder="5:45" class="w-full bg-transparent px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+              <span class="bg-[#1e293b] text-slate-300 px-2.5 py-2 text-[11px] font-semibold border-l border-[#1e293b]">นาที/กม.</span>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">เป้าหมายเวลาจบ</label>
+            <div class="flex items-center bg-[#090d14] border border-[#1e293b] rounded-xl overflow-hidden">
+              <input id="raceFormTimeVal" type="text" placeholder="2:05" class="w-full bg-transparent px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+              <select id="raceFormTimeUnit" class="bg-[#1e293b] text-slate-300 px-2 py-2 text-xs font-semibold border-l border-[#1e293b]">
+                <option value="ชม.">ชม.</option>
+                <option value="นาที">นาที</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modalRace')" class="px-4 py-2 text-slate-400 text-xs">ยกเลิก</button>
+          <button type="submit" class="px-5 py-2 bg-[#6ee7b7] text-[#090d14] rounded-xl font-bold text-xs">บันทึกเป้าหมาย</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. Modal ตารางซ้อม -->
+  <div id="modalTraining" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-md rounded-3xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <h3 id="trainingModalTitle" class="text-base font-bold text-white">เพิ่มตารางซ้อม</h3>
+        <button onclick="closeModal('modalTraining')" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <form id="trainingForm" class="flex flex-col gap-3.5 mt-4">
+        <input type="hidden" id="trainingEditId">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">วันในสัปดาห์</label>
+            <select id="trainDay" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+              <option value="จันทร์">จันทร์</option>
+              <option value="อังคาร">อังคาร</option>
+              <option value="พุธ">พุธ</option>
+              <option value="พฤหัสบดี">พฤหัสบดี</option>
+              <option value="ศุกร์">ศุกร์</option>
+              <option value="เสาร์">เสาร์</option>
+              <option value="อาทิตย์">อาทิตย์</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">ระยะทางตามแผน</label>
+            <div class="flex items-center bg-[#090d14] border border-[#1e293b] rounded-xl overflow-hidden">
+              <input id="trainKm" type="number" step="0.01" required placeholder="8.00" class="w-full bg-transparent px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+              <span class="bg-[#1e293b] text-slate-400 px-2.5 py-2 text-xs font-semibold border-l border-[#1e293b]">กม.</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">ประเภทการซ้อม</label>
+          <select id="trainType" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+            <option value="Easy Run">🏃 Easy Run (วิ่งโซน 2 เบาๆ)</option>
+            <option value="Interval">⚡ Interval / Tempo (ซ้อมความเร็ว)</option>
+            <option value="Long Run">🏔️ Long Run (วิ่งระยะยาว)</option>
+            <option value="Rest Day">🛌 Rest Day (วันพักผ่อน)</option>
+            <option value="RACE DAY">🏆 RACE DAY (วันแข่งขัน)</option>
+            <option value="Shakeout">👟 Shakeout / จ็อกกิ้งคลายกรด</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">รายละเอียด / หมายเหตุ</label>
+          <input id="trainDesc" type="text" placeholder="เช่น ซ้อม 400m x 8 เที่ยว พัก 90 วินาที" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        </div>
+        <div class="flex items-center justify-between pt-2">
+          <button type="button" id="deleteTrainBtn" class="hidden text-xs text-rose-400 hover:text-rose-300 font-semibold">ลบ</button>
+          <div class="flex gap-2 ml-auto">
+            <button type="button" onclick="closeModal('modalTraining')" class="px-4 py-2 text-slate-400 text-xs">ยกเลิก</button>
+            <button type="submit" class="px-5 py-2 bg-[#6ee7b7] text-[#090d14] rounded-xl font-bold text-xs">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal อื่นๆ -->
+  <div id="modalCategory" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-sm rounded-3xl p-5 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <h3 class="text-sm font-bold text-white">จัดการหมวดหมู่งาน To-Do</h3>
+        <button onclick="closeModal('modalCategory')" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div class="flex flex-col gap-2 mt-4 max-h-48 overflow-y-auto custom-scroll" id="categoryManageList"></div>
+      <form id="newCategoryForm" class="flex flex-col gap-2.5 mt-4 pt-3 border-t border-[#1e293b]">
+        <div class="flex gap-2">
+          <input id="catIconInput" type="text" value="📌" class="w-14 bg-[#090d14] border border-[#1e293b] rounded-xl px-2 py-2 text-center text-sm text-white focus:outline-none">
+          <input id="catNameInput" type="text" required placeholder="ชื่อหมวดหมู่" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        </div>
+        <button type="submit" class="w-full py-2 bg-[#6ee7b7] text-[#090d14] rounded-xl text-xs font-bold">+ เพิ่มหมวดหมู่</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="modalRoutine" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-sm rounded-3xl p-5 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <h3 class="text-sm font-bold text-white">เพิ่มกิจวัตร</h3>
+        <button onclick="closeModal('modalRoutine')" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <form id="routineForm" class="flex flex-col gap-3 mt-4">
+        <input id="routineText" type="text" required placeholder="ชื่อกิจวัตร" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        <input id="routineTime" type="time" value="08:00" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modalRoutine')" class="px-3 py-1.5 text-slate-400 text-xs">ยกเลิก</button>
+          <button type="submit" class="px-4 py-1.5 bg-[#6ee7b7] text-[#090d14] rounded-xl font-bold text-xs">เพิ่ม</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modalSub" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121824] border border-[#1e293b] w-full max-w-md rounded-3xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+        <h3 id="subModalTitle" class="text-base font-bold text-white">รายการสมาชิก</h3>
+        <button onclick="closeModal('modalSub')" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <form id="subForm" class="flex flex-col gap-3 mt-4">
+        <input type="hidden" id="subEditId">
+        <input id="subName" type="text" required placeholder="ชื่อบริการ" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        <div class="grid grid-cols-2 gap-2">
+          <input id="subPrice" type="number" step="any" required placeholder="ราคา (บาท)" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-['Inter']">
+          <select id="subCycle" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+            <option value="monthly">รายเดือน</option>
+            <option value="yearly">รายปี</option>
+          </select>
+        </div>
+        <input id="subNextDate" type="date" class="w-full bg-[#090d14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        <div class="flex items-center justify-between pt-2">
+          <button type="button" id="deleteSubBtn" class="hidden text-xs text-rose-400 hover:text-rose-300 font-semibold">ลบ</button>
+          <div class="flex gap-2 ml-auto">
+            <button type="button" onclick="closeModal('modalSub')" class="px-4 py-2 text-slate-400 text-xs">ยกเลิก</button>
+            <button type="submit" class="px-5 py-2 bg-[#6ee7b7] text-[#090d14] rounded-xl font-bold text-xs">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SCRIPT ENGINE -->
+  <script>
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); lucide.createIcons(); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function showToast(msg) {
+      const toast = document.getElementById("toastNotification");
+      document.getElementById("toastMsg").textContent = msg;
+      toast.classList.remove("-translate-y-20", "opacity-0");
+      toast.classList.add("translate-y-0", "opacity-100");
+      setTimeout(() => {
+        toast.classList.remove("translate-y-0", "opacity-100");
+        toast.classList.add("-translate-y-20", "opacity-0");
+      }, 2500);
+    }
+
+    function switchMainTab(tab) {
+      ['tasks', 'running', 'finance'].forEach(t => {
+        document.getElementById(`section-${t}`).classList.add('hidden');
+        document.getElementById(`nav-btn-${t}`).className = "nav-item flex flex-col items-center justify-center gap-1 text-slate-500 transition hover:text-slate-300";
+      });
+
+      document.getElementById(`section-${tab}`).classList.remove('hidden');
+      document.getElementById(`nav-btn-${tab}`).className = "nav-item flex flex-col items-center justify-center gap-1 text-[#6ee7b7] font-bold transition";
+
+      const titleMap = {
+        'tasks': 'ศูนย์รวมงานประจำวัน',
+        'running': 'ตารางซ้อมวิ่ง & กีฬา',
+        'finance': 'การเงิน & ค่าสมาชิก'
+      };
+      document.getElementById('headerSectionTitle').textContent = titleMap[tab];
+      lucide.createIcons();
+    }
+
+    const today = new Date();
+    const thaiYear = today.getFullYear() + 543;
+    const daysThai = ["วันอาทิตย์", "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์"];
+    const daysThaiShort = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+    const currentDayName = daysThaiShort[today.getDay()];
+    const monthsThai = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+    const monthsThaiShort = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    
+    document.getElementById("currentDateText").textContent = `${daysThai[today.getDay()]}ที่ ${today.getDate()} ${monthsThai[today.getMonth()]} ${thaiYear}`;
+
+    function getWeekDaysDateInfo() {
+      const now = new Date();
+      const currentDay = now.getDay();
+      const diffToMonday = (currentDay === 0 ? -6 : 1 - currentDay);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diffToMonday);
+
+      const map = {};
+      const dayKeys = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"];
+      dayKeys.forEach((name, i) => {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dayNum = String(d.getDate()).padStart(2, '0');
+        map[name] = {
+          dateStr: `${y}-${m}-${dayNum}`,
+          labelFormatted: `${d.getDate()} ${monthsThaiShort[d.getMonth()]} ${y + 543}`
+        };
+      });
+      return map;
+    }
+
+    let raceTarget = {
+      name: "Bangkok Airways Chiang Mai Half Marathon",
+      date: "2026-09-27",
+      distance: 21.10,
+      pace: "5:45",
+      timeVal: "2:05",
+      timeUnit: "ชม."
+    };
+
+    let shoesList = [
+      { id: 1, name: "Adidas Adios Pro 3", currentKm: 385.00, maxKm: 600.00, badge: "รองเท้าแข่งหลัก", image: "" },
+      { id: 2, name: "Apex Swift 2.0 Pro", currentKm: 530.00, maxKm: 600.00, badge: "ใกล้ครบระยะเตือน!", image: "" }
+    ];
+
+    let trainingList = [
+      { id: 1, day: "จันทร์", type: "Rest Day", planKm: 0.00, actualKm: 0.00, shoeId: 1, desc: "พักผ่อนเต็มวัน ยืดกล้ามเนื้อและโฟมโรลเลอร์", done: true, calendarActivityId: null },
+      { id: 2, day: "อังคาร", type: "Easy Run", planKm: 8.00, actualKm: 8.00, shoeId: 1, desc: "วิ่งโซน 2 เบาๆ วอร์มระบบหายใจ", done: false, calendarActivityId: null },
+      { id: 3, day: "พุธ", type: "Interval", planKm: 7.50, actualKm: 7.50, shoeId: 1, desc: "ซ้อมความเร็ว 400m x 8 เที่ยว (Pace 4:40)", done: false, calendarActivityId: null },
+      { id: 4, day: "พฤหัสบดี", type: "Easy Run", planKm: 6.00, actualKm: 6.00, shoeId: 2, desc: "วิ่งสบายๆ คลายกล้ามเนื้อ", done: false, calendarActivityId: null },
+      { id: 5, day: "ศุกร์", type: "Rest Day", planKm: 0.00, actualKm: 0.00, shoeId: 1, desc: "พักร่างกาย โหลดคาร์โบไฮเดรต", done: false, calendarActivityId: null },
+      { id: 6, day: "เสาร์", type: "Shakeout", planKm: 3.50, actualKm: 3.50, shoeId: 1, desc: "จ็อกกิ้งเบาๆ กระตุ้นกล้ามเนื้อ 20 นาที", done: false, calendarActivityId: null },
+      { id: 7, day: "อาทิตย์", type: "RACE DAY", planKm: 21.10, actualKm: 21.10, shoeId: 1, desc: "วันแข่งขันจริง ลุยเป้า Sub 2:05", done: false, calendarActivityId: null }
+    ];
+
+    let runHistoryList = [
+      { id: 101, date: "2026-09-13", title: "วิ่งกลางแจ้ง", km: 6.53, pace: "6'50\"", time: "00:44:35", hr: 167, calories: 491, shoeId: 1 }
+    ];
+
+    let todoCategories = [
+      { id: 'cat_urgent', name: 'งานด่วนวันนี้', icon: '🔥' },
+      { id: 'cat_stock', name: 'สต็อก & จัดส่ง', icon: '📦' },
+      { id: 'cat_personal', name: 'งานส่วนตัว', icon: '🌿' }
+    ];
+    let activeTodoCat = 'cat_urgent';
+    let todos = [
+      { id: 1, categoryId: 'cat_urgent', text: "พิมพ์ใบปะหน้าพัสดุ Shopee & Lazada รอบบ่าย", done: false },
+      { id: 2, categoryId: 'cat_urgent', text: "เช็กยอดโอนผ้าแคนวาสกับทางโรงทอ", done: true }
+    ];
+
+    let routines = [
+      { id: 1, text: "ดื่มน้ำเปล่า 1 แก้วใหญ่ทันทีหลังตื่นนอน", time: "07:00", done: true },
+      { id: 2, text: "เช็กสต็อกและสรุปออเดอร์เตรียมแพ็กเช้า", time: "08:30", done: true }
+    ];
+
+    let expenses = [{ id: 1, name: "กาแฟ Americano", amount: 65, category: "อาหาร", date: "วันนี้" }];
+
+    let subs = [
+      { id: 1, name: "Gemini + Youtube Peck", price: 279, cycle: "monthly", nextDate: "2026-09-27" },
+      { id: 2, name: "CapCut Pro", price: 1810, cycle: "yearly", nextDate: "2027-01-19" },
+      { id: 3, name: "HUAWEI Health", price: 1100, cycle: "yearly", nextDate: "2027-08-26" }
+    ];
+
+    // ฟังก์ชันรวบรวมประวัติข้อมูลเก่าที่มีอยู่ในเครื่องเพื่อไม่ให้สูญหาย
+    function collectLocalMachineData() {
+      const getP = (k) => {
+        try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+      };
+
+      const localShoes = getP("shoes_list_data_v4") || getP("shoes_list_data_v3") || getP("shoes_list_data_v2");
+      const localHistory = getP("run_history_v4") || getP("run_history_v3") || getP("run_history_v2");
+      const localTraining = getP("training_list_data_v4") || getP("training_list_data_v3");
+      const localRace = getP("race_target_data_v2");
+      const localTodos = getP("todos_data");
+      const localCats = getP("todo_categories");
+      const localRoutines = getP("routines_data");
+      const localSubs = getP("subs_local");
+
+      return {
+        hasAnyData: !!(localShoes || localHistory || localTraining || localRace || localTodos),
+        data: {
+          raceTarget: localRace || raceTarget,
+          shoesList: localShoes || shoesList,
+          trainingList: localTraining || trainingList,
+          runHistoryList: localHistory || runHistoryList,
+          todoCategories: localCats || todoCategories,
+          todos: localTodos || todos,
+          routines: localRoutines || routines,
+          expenses: expenses,
+          subs: localSubs || subs
+        }
+      };
+    }
+
+
+    // ========================================================
+    // FIREBASE FIRESTORE REAL-TIME CLOUD SYNC ENGINE (v2)
+    // Local-first + realtime listener + stale-write protection.
+    // ========================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyDxdNeaeAqiLTn2K0wtIkxLb0yrYPUJ-j0",
+      authDomain: "subscription-of-me.firebaseapp.com",
+      projectId: "subscription-of-me",
+      storageBucket: "subscription-of-me.firebasestorage.app",
+      messagingSenderId: "282916449549",
+      appId: "1:282916449549:web:e04b72888e41c968145444",
+      measurementId: "G-6MHS9K3V3C"
+    };
+
+    let db = null;
+    let cloudDocRef = null;
+    try {
+      if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length === 0) firebase.initializeApp(firebaseConfig);
+      if (typeof firebase !== 'undefined') {
+        db = firebase.firestore();
+        db.enablePersistence({ synchronizeTabs: true }).catch(err => console.log("Persistence note:", err.code));
+        cloudDocRef = db.collection("lifehub_dashboard").doc("user_data");
+      }
+    } catch (err) {
+      console.warn("Firebase initialization failed; local mode enabled:", err);
+    }
+    const LOCAL_CACHE_KEY = "lifehub_local_cache_v2";
+    let cloudSnapshotReady = false;
+    let localDirtyUntil = 0;
+    let syncTimeout = null;
+    let lastCloudUpdatedAt = 0;
+    let pendingCloudUpdatedAt = 0;
+    let cloudWriteInFlight = false;
+    let cloudBootstrapWriteDone = false;
+
+    function setCloudStatus(status, detail = "") {
+      const badge = document.getElementById("cloudStatusBadge");
+      const dot = document.getElementById("cloudStatusDot");
+      const text = document.getElementById("cloudStatusText");
+      if (!badge || !dot || !text) return;
+      if (status === 'syncing') {
+        badge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-950/50 text-amber-400 border border-amber-500/30 transition-all";
+        dot.className = "w-2 h-2 rounded-full bg-amber-400 animate-spin";
+        text.textContent = "กำลังซิงค์...";
+      } else if (status === 'synced') {
+        badge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/50 text-emerald-400 border border-emerald-500/30 shadow-sm shadow-emerald-500/10 transition-all";
+        dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+        text.textContent = "Cloud ✓";
+      } else {
+        badge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-rose-950/50 text-rose-400 border border-rose-500/30 transition-all";
+        dot.className = "w-2 h-2 rounded-full bg-rose-400";
+        text.textContent = detail ? `Cloud: ${detail}` : "ออฟไลน์ · เก็บในเครื่อง";
+        if (badge) badge.title = detail || "ไม่สามารถซิงค์ Cloud ได้";
+      }
+    }
+
+    function compactPathForCloud(coords) {
+      if (!Array.isArray(coords) || coords.length <= 280) return coords || [];
+      const step = Math.ceil(coords.length / 280);
+      const out = coords.filter((_, i) => i % step === 0);
+      if (out[out.length - 1] !== coords[coords.length - 1]) out.push(coords[coords.length - 1]);
+      return out;
+    }
+
+    function buildCloudPayload() {
+      // เก็บ GPS แบบย่อบน Cloud เพื่อไม่ให้เอกสาร Firestore โตจนชนขนาดสูงสุด
+      const cloudRuns = runHistoryList.map(a => ({ ...a, pathCoordinates: compactPathForCloud(a.pathCoordinates) }));
+      return {
+        raceTarget, shoesList, trainingList, runHistoryList: cloudRuns, todoCategories, todos, routines, expenses, subs,
+        schemaVersion: 2,
+        updatedAt: Date.now()
+      };
+    }
+
+    function saveLocalCache(payload = buildCloudPayload()) {
+      try { localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(payload)); } catch (e) { console.warn("Local cache save failed", e); }
+    }
+
+    function applyDataObject(data) {
+      if (!data) return;
+      if (data.raceTarget) raceTarget = data.raceTarget;
+      if (data.shoesList) shoesList = data.shoesList;
+      if (data.trainingList) trainingList = data.trainingList;
+      if (data.runHistoryList) runHistoryList = data.runHistoryList;
+      if (data.todoCategories) todoCategories = data.todoCategories;
+      if (data.todos) todos = data.todos;
+      if (data.routines) routines = data.routines;
+      if (data.expenses) expenses = data.expenses;
+      if (data.subs) subs = data.subs;
+    }
+
+    function loadLocalCacheEarly() {
+      try {
+        const raw = localStorage.getItem(LOCAL_CACHE_KEY) || localStorage.getItem("lifehub_local_cache");
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        applyDataObject(data);
+        lastCloudUpdatedAt = Number(data.updatedAt || 0);
+        renderEntireApp();
+        return true;
+      } catch (e) { console.warn("Local cache load failed", e); return false; }
+    }
+
+    function syncToCloud() {
+      const payload = buildCloudPayload();
+      saveLocalCache(payload);
+      localDirtyUntil = payload.updatedAt + 5000;
+      pendingCloudUpdatedAt = payload.updatedAt;
+      if (!cloudDocRef) { setCloudStatus('offline', 'Local mode'); return; }
+      setCloudStatus('syncing');
+      clearTimeout(syncTimeout);
+      syncTimeout = setTimeout(async () => {
+        if (!cloudDocRef) return;
+        cloudWriteInFlight = true;
+        const writeVersion = pendingCloudUpdatedAt;
+        try {
+          await cloudDocRef.set(payload, { merge: true });
+          lastCloudUpdatedAt = Math.max(lastCloudUpdatedAt, writeVersion);
+          // The snapshot listener will confirm this exact version. Do not write again from the listener.
+          if (pendingCloudUpdatedAt === writeVersion) setCloudStatus('synced');
+        } catch (err) {
+          console.error("Firestore sync error:", err);
+          setCloudStatus('offline', err.code || 'ตรวจสอบสิทธิ์ Firestore');
+          showToast("บันทึกไว้ในเครื่องแล้ว แต่ Cloud ยังไม่สำเร็จ");
+        } finally {
+          cloudWriteInFlight = false;
+        }
+      }, 250);
+    }
+
+    async function forceMigrateLocalToCloud() {
+      const local = collectLocalMachineData();
+      if (!local.hasAnyData) { alert("ไม่พบประวัติข้อมูลเก่าในเครื่องนี้"); return; }
+      if (!confirm("ส่งข้อมูลเก่าจากเครื่องนี้ขึ้น Cloud และเก็บข้อมูลเดิมไว้ใช่หรือไม่?")) return;
+      applyDataObject(local.data);
+      const payload = buildCloudPayload();
+      saveLocalCache(payload);
+      setCloudStatus('syncing');
+      try {
+        if (!cloudDocRef) throw new Error('Cloud unavailable');
+        await cloudDocRef.set(payload, { merge: true });
+        lastCloudUpdatedAt = payload.updatedAt;
+        setCloudStatus('synced');
+        renderEntireApp();
+        showToast("อัปโหลดข้อมูลเก่าขึ้น Cloud สำเร็จ ✓");
+      } catch (err) {
+        setCloudStatus('offline', err.code || 'ตรวจสอบสิทธิ์ Firestore');
+        alert("Cloud ยังบันทึกไม่ได้ แต่ข้อมูลในเครื่องยังอยู่ครับ: " + err.message);
+      }
+    }
+
+    function exportBackupData() {
+      const backupObj = { raceTarget, shoesList, trainingList, runHistoryList, todoCategories, todos, routines, expenses, subs, exportedAt: new Date().toISOString() };
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObj, null, 2));
+      const a = document.createElement('a'); a.setAttribute("href", dataStr);
+      a.setAttribute("download", `LifeHub_Backup_${today.getFullYear()}-${today.getMonth()+1}-${today.getDate()}.json`);
+      document.body.appendChild(a); a.click(); a.remove(); showToast("ดาวน์โหลดไฟล์สำรองเรียบร้อยแล้ว");
+    }
+
+    document.getElementById("importBackupInput").addEventListener("change", (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.target.result);
+          if (!confirm("กู้คืนข้อมูลจากไฟล์นี้ใช่หรือไม่? ข้อมูลปัจจุบันจะถูกแทนที่ด้วยไฟล์สำรอง")) return;
+          applyDataObject(parsed); syncToCloud(); renderEntireApp(); showToast("กู้คืนข้อมูลสำเร็จ ✓");
+        } catch (err) { alert("ไฟล์ Backup ไม่ถูกต้องครับ"); }
+      };
+      reader.readAsText(file); e.target.value = "";
+    });
+
+    function renderEntireApp() {
+      renderRaceTarget(); renderShoes(); renderTraining(); renderCalendar(); renderRunStats();
+      renderTodoTabs(); renderTodos(); renderRoutines(); renderExpenses(); renderSubs(); lucide.createIcons();
+    }
+
+    // โหลดข้อมูลล่าสุดจากเครื่องก่อน เพื่อไม่ให้ refresh แล้วข้อมูลที่ยังไม่ขึ้น Cloud หาย
+    if (!localStorage.getItem(LOCAL_CACHE_KEY)) { const legacy = collectLocalMachineData(); if (legacy.hasAnyData) { applyDataObject(legacy.data); saveLocalCache(buildCloudPayload()); renderEntireApp(); } }
+    loadLocalCacheEarly();
+
+    if (cloudDocRef) cloudDocRef.onSnapshot((doc) => {
+      if (!doc.exists) {
+        cloudSnapshotReady = true;
+        // Only bootstrap once. Never call syncToCloud from the snapshot listener again.
+        if (!cloudBootstrapWriteDone) {
+          cloudBootstrapWriteDone = true;
+          const cacheRaw = localStorage.getItem(LOCAL_CACHE_KEY) || localStorage.getItem("lifehub_local_cache");
+          if (cacheRaw) {
+            try {
+              const cached = JSON.parse(cacheRaw);
+              applyDataObject(cached);
+              renderEntireApp();
+              syncToCloud();
+              return;
+            } catch (_) {}
+          }
+          syncToCloud();
+        }
+        return;
+      }
+      const data = doc.data();
+      const remoteUpdatedAt = Number(data.updatedAt || 0);
+      cloudSnapshotReady = true;
+
+      // Snapshot confirming our own write: accept it, clear the pending marker, and stop.
+      if (pendingCloudUpdatedAt && remoteUpdatedAt >= pendingCloudUpdatedAt) {
+        pendingCloudUpdatedAt = 0;
+        localDirtyUntil = 0;
+      }
+
+      // Never write back from onSnapshot. The listener is read-only to avoid sync loops.
+      if (remoteUpdatedAt >= lastCloudUpdatedAt) {
+        applyDataObject(data);
+        lastCloudUpdatedAt = remoteUpdatedAt;
+        saveLocalCache({ ...data, updatedAt: remoteUpdatedAt });
+        renderEntireApp();
+        setCloudStatus('synced');
+        return;
+      }
+
+      // Local data is newer than the remote snapshot. Keep local data; the next explicit
+      // local edit/sync will upload it. Do not auto-retry here.
+      if (pendingCloudUpdatedAt && remoteUpdatedAt < pendingCloudUpdatedAt) {
+        setCloudStatus('syncing');
+        return;
+      }
+      setCloudStatus('synced');
+    }, (error) => {
+      console.warn("Firestore listener error:", error);
+      setCloudStatus('offline', error.code || 'permission/network');
+      // ไม่ทิ้งข้อมูล local แม้ Cloud ใช้ไม่ได้
+      loadLocalCacheEarly();
+    });
+
+    // ========================================================
+    // GPX PARSER & HAVERSINE ALGORITHM (แกะข้อมูลทั้ง 6 ข้ออย่างแม่นยำ)
+    // ========================================================
+    let parsedGpxData = null;
+    let leafletMapInstance = null;
+
+    // คำนวณระยะห่างระหว่างจุดพิกัดด้วยสูตร Haversine (หน่วย: เมตร)
+    function calcHaversineMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * toRad;
+      const dLon = (lon2 - lon1) * toRad;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function formatTimeSec(totalSec) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = Math.floor(totalSec % 60);
+      if (h > 0) {
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      }
+      return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    function formatPace(secPerKm) {
+      if (!isFinite(secPerKm) || secPerKm <= 0 || secPerKm > 3600) return "-";
+      const m = Math.floor(secPerKm / 60);
+      let s = Math.round(secPerKm % 60);
+      let mm = m; if (s === 60) { mm += 1; s = 0; }
+      return `${mm}'${String(s).padStart(2, '0')}"`;
+    }
+
+    const gpxInput = document.getElementById("gpxFileInput");
+    const bulkZipInput = document.getElementById("stravaBulkZipInput");
+
+    gpxInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      try {
+        showToast(`กำลังอ่าน ${file.name}...`);
+        const ext = getFileExtension(file.name);
+        if (ext === 'gpx') {
+          await processGpxFileContent(await file.text(), file.name);
+        } else if (ext === 'tcx') {
+          await processTcxFileContent(await file.text(), file.name);
+        } else if (ext === 'fit' || ext === 'gz') {
+          await processFitFile(file, file.name);
+        } else {
+          throw new Error('รองรับเฉพาะ .FIT, .TCX และ .GPX');
+        }
+      } catch (err) {
+        console.error("Activity file parse error:", err);
+        alert("ไม่สามารถอ่านไฟล์กิจกรรมนี้ได้: " + (err?.message || err));
+      }
+    });
+
+    bulkZipInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        await importStravaBulkZip(file);
+      } catch (err) {
+        console.error('Strava bulk import error:', err);
+        alert('นำเข้า ZIP ไม่สำเร็จ: ' + (err?.message || err));
+      }
+    });
+
+    function getFileExtension(name) {
+      const lower = String(name || '').toLowerCase();
+      if (lower.endsWith('.fit.gz') || lower.endsWith('.gpx.gz') || lower.endsWith('.tcx.gz')) return 'gz';
+      return lower.split('.').pop();
+    }
+
+    function getBaseActivityExtension(name) {
+      const lower = String(name || '').toLowerCase();
+      if (lower.endsWith('.fit.gz')) return 'fit';
+      if (lower.endsWith('.gpx.gz')) return 'gpx';
+      if (lower.endsWith('.tcx.gz')) return 'tcx';
+      return lower.split('.').pop();
+    }
+
+    async function gunzipArrayBuffer(buffer) {
+      if (typeof DecompressionStream === 'undefined') {
+        throw new Error('เบราว์เซอร์นี้ไม่รองรับการอ่านไฟล์ .gz กรุณาใช้ Chrome/Safari รุ่นปัจจุบัน หรือแตกไฟล์ก่อน');
+      }
+      const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
+      return await new Response(stream).arrayBuffer();
+    }
+
+    function formatImportedDate(ms) {
+      const d = new Date(ms);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return {
+        date: `${year}-${month}-${day}`,
+        display: `${String(day).padStart(2,'0')} ${monthsThaiShort[d.getMonth()]} ${year + 543} เวลา ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} น.`
+      };
+    }
+
+    function cleanNumber(v) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function buildActivityFromPoints(points, meta = {}) {
+      const valid = (points || []).filter(p => Number.isFinite(Number(p.time)));
+      if (valid.length < 1) throw new Error('ไฟล์ไม่พบข้อมูลเวลา');
+      valid.sort((a,b) => a.time - b.time);
+
+      let totalMeters = 0;
+      const cumDistance = [0];
+      const cumTimer = [0];
+      const pathCoordinates = [];
+      let movingSec = 0;
+
+      for (let i = 0; i < valid.length; i++) {
+        const p = valid[i];
+        if (Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lon))) pathCoordinates.push([Number(p.lat), Number(p.lon)]);
+        if (i === 0) continue;
+        const prev = valid[i-1];
+        let distM = Number.isFinite(Number(p.distanceM)) && Number(p.distanceM) >= Number(prev.distanceM || 0)
+          ? Number(p.distanceM) - Number(prev.distanceM || 0)
+          : (Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lon)) && Number.isFinite(Number(prev.lat)) && Number.isFinite(Number(prev.lon))
+              ? calcHaversineMeters(Number(prev.lat), Number(prev.lon), Number(p.lat), Number(p.lon)) : 0);
+        if (!Number.isFinite(distM) || distM < 0) distM = 0;
+        totalMeters += distM;
+
+        const dt = Math.max(0, (Number(p.time) - Number(prev.time)) / 1000);
+        const speed = dt > 0 ? distM / dt : 0;
+        const explicitTimer = Number.isFinite(Number(p.timerSec)) ? Number(p.timerSec) : null;
+        if (explicitTimer != null && explicitTimer >= cumTimer[i-1]) {
+          cumTimer.push(explicitTimer);
+          movingSec = Math.max(movingSec, explicitTimer);
+        } else {
+          const moving = dt > 0 && dt <= 20 && (speed > 0.45 || dt < 3);
+          if (moving) movingSec += dt;
+          cumTimer.push(movingSec);
+        }
+        cumDistance.push(totalMeters);
+      }
+
+      const suppliedDistance = cleanNumber(meta.distanceM);
+      if (suppliedDistance > 0 && totalMeters <= 0) totalMeters = suppliedDistance;
+      const distanceKm = totalMeters / 1000;
+      if (cleanNumber(meta.movingSec) > 0) movingSec = cleanNumber(meta.movingSec);
+      if (movingSec <= 0 && valid.length > 1) movingSec = Math.max(0, (valid[valid.length-1].time - valid[0].time) / 1000);
+
+      // Rebuild cumulative arrays against the final point order when explicit distances exist.
+      if (valid.some(p => Number.isFinite(Number(p.distanceM)))) {
+        let acc = 0;
+        cumDistance[0] = 0;
+        for (let i=1;i<valid.length;i++) {
+          const d0 = Number(valid[i-1].distanceM), d1 = Number(valid[i].distanceM);
+          if (Number.isFinite(d0) && Number.isFinite(d1) && d1 >= d0) acc = d1;
+          cumDistance[i] = acc;
+        }
+        totalMeters = Math.max(totalMeters, acc);
+      }
+
+      const splits = computeSplitsFromSeries(valid, cumDistance, cumTimer);
+      const bestEfforts = computeBestEffortsFromSeries(valid, cumDistance, cumTimer);
+      const firstTime = valid[0].time;
+      const dt = formatImportedDate(firstTime);
+      const avgHr = meta.avgHr || (() => {
+        const hrs = valid.map(p => Number(p.hr)).filter(n => n > 0);
+        return hrs.length ? Math.round(hrs.reduce((a,b)=>a+b,0)/hrs.length) : null;
+      })();
+
+      return {
+        source: 'file',
+        sourceId: meta.sourceId || `${meta.fileName || 'activity'}|${dt.date}|${Math.round(totalMeters)}|${Math.round(movingSec)}`,
+        title: meta.title || 'วิ่งจากไฟล์กิจกรรม',
+        date: meta.date || dt.date,
+        displayDate: meta.displayDate || dt.display,
+        startDateIso: new Date(firstTime).toISOString(),
+        startDateLocalIso: new Date(firstTime).toISOString(),
+        distanceKm: Number((cleanNumber(meta.distanceM) > 0 ? cleanNumber(meta.distanceM) / 1000 : totalMeters / 1000).toFixed(2)),
+        durationFormatted: formatTimeSec(movingSec),
+        paceFormatted: formatPace(movingSec / Math.max(distanceKm, 0.0001)),
+        avgHr,
+        calories: meta.calories != null ? Math.round(Number(meta.calories)) : null,
+        bestEfforts,
+        splits,
+        pathCoordinates,
+        fileName: meta.fileName || ''
+      };
+    }
+
+    function computeSplitsFromSeries(points, cumDistance, cumTimer) {
+      if (!points || points.length < 2) return [];
+      const totalMeters = cumDistance[cumDistance.length-1] || 0;
+      const splits = [];
+      let lastM = 0, lastSec = 0, target = 1000, idx = 1;
+      while (target <= totalMeters + 0.01) {
+        const exact = interpolateTimeAtDistance(cumDistance, cumTimer, target);
+        if (exact == null) break;
+        const distM = target - lastM;
+        const sec = Math.max(0, exact - lastSec);
+        splits.push({kmIndex: idx++, distanceM: distM, durationSec: sec, paceStr: formatPace(sec / (distM/1000))});
+        lastM = target; lastSec = exact; target += 1000;
+      }
+      if (totalMeters - lastM >= 100) {
+        const sec = Math.max(0, (cumTimer[cumTimer.length-1] || 0) - lastSec);
+        const rem = totalMeters - lastM;
+        splits.push({kmIndex: `${idx} (เศษ ${(rem/1000).toFixed(2)}k)`, distanceM: rem, durationSec: sec, paceStr: formatPace(sec/(rem/1000))});
+      }
+      return splits;
+    }
+
+    function interpolateTimeAtDistance(cumDistance, cumTimer, target) {
+      if (!cumDistance.length || target < 0 || target > cumDistance[cumDistance.length-1] + 0.01) return null;
+      let lo = 0, hi = cumDistance.length - 1;
+      while (lo < hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (cumDistance[mid] < target) lo = mid + 1; else hi = mid;
+      }
+      const j = lo;
+      if (j === 0) return cumTimer[0] || 0;
+      const d0 = cumDistance[j-1], d1 = cumDistance[j];
+      const t0 = cumTimer[j-1] || 0, t1 = cumTimer[j] || t0;
+      if (d1 <= d0) return t1;
+      const f = Math.max(0, Math.min(1, (target-d0)/(d1-d0)));
+      return t0 + (t1-t0)*f;
+    }
+
+    function computeBestEffortsFromSeries(points, cumDistance, cumTimer) {
+      const defs = [
+        {key:'400m',label:'400 ม.',target:400},
+        {key:'halfMile',label:'ครึ่งไมล์',target:804.672},
+        {key:'1k',label:'1 กม.',target:1000},
+        {key:'1mile',label:'1 ไมล์',target:1609.344},
+        {key:'2mile',label:'2 ไมล์',target:3218.688},
+        {key:'5k',label:'5 กม.',target:5000},
+        {key:'10k',label:'10 กม.',target:10000},
+        {key:'15k',label:'15 กม.',target:15000},
+        {key:'10mile',label:'10 ไมล์',target:16093.44},
+        {key:'20k',label:'20 กม.',target:20000},
+        {key:'halfMarathon',label:'ฮาล์ฟมาราธอน',target:21097.5},
+        {key:'marathon',label:'ฟูลมาราธอน',target:42195}
+      ];
+      const total = cumDistance[cumDistance.length-1] || 0;
+      const list=[];
+      for (const def of defs) {
+        if (total + 0.01 < def.target) continue;
+        let best = Infinity;
+        for (let i=0;i<cumDistance.length;i++) {
+          const startD=cumDistance[i];
+          if (total-startD+0.01 < def.target) break;
+          const targetTime=interpolateTimeAtDistance(cumDistance,cumTimer,startD+def.target);
+          if (targetTime == null) continue;
+          const t=Math.max(0,targetTime-(cumTimer[i]||0));
+          if (t>0 && t<best) best=t;
+        }
+        if (Number.isFinite(best)) list.push({key:def.key,label:def.label,elapsedSec:best,movingSec:best,distanceM:def.target,paceSec:best/(def.target/1000)});
+      }
+      return {list};
+    }
+
+    async function processGpxFileContent(xmlString, fileName, summaryMeta = {}) {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlString, "application/xml");
+      const trkpts = xmlDoc.getElementsByTagName("trkpt");
+      if (!trkpts || trkpts.length < 2) throw new Error('ไฟล์ GPX นี้ไม่มีข้อมูลพิกัดการวิ่ง (Track Points)');
+      const points=[];
+      for (let i=0;i<trkpts.length;i++) {
+        const pt=trkpts[i];
+        const lat=parseFloat(pt.getAttribute('lat')), lon=parseFloat(pt.getAttribute('lon'));
+        const timeEl=pt.getElementsByTagName('time')[0];
+        const hrEl=pt.getElementsByTagName('hr')[0] || pt.getElementsByTagNameNS('*','hr')[0];
+        points.push({lat,lon,time:timeEl?new Date(timeEl.textContent).getTime():0,hr:hrEl?Number(hrEl.textContent):null});
+      }
+      parsedGpxData=buildActivityFromPoints(points,{...summaryMeta,fileName,title:summaryMeta.title||'วิ่งจาก GPX',sourceId:summaryMeta.sourceId});
+      displayGpxModalResult(parsedGpxData);
+    }
+
+    async function processTcxFileContent(xmlString, fileName, summaryMeta = {}) {
+      const parser=new DOMParser();
+      const xmlDoc=parser.parseFromString(xmlString,'application/xml');
+      const tps=Array.from(xmlDoc.getElementsByTagName('Trackpoint'));
+      if (!tps.length) throw new Error('ไฟล์ TCX นี้ไม่มี Trackpoint');
+      const points=tps.map(tp=>{
+        const timeEl=tp.getElementsByTagName('Time')[0];
+        const distEl=tp.getElementsByTagName('DistanceMeters')[0];
+        const hrEl=tp.getElementsByTagName('HeartRateBpm')[0];
+        const valEl=hrEl?.getElementsByTagName('Value')[0];
+        const pos=tp.getElementsByTagName('Position')[0];
+        const latEl=pos?.getElementsByTagName('LatitudeDegrees')[0], lonEl=pos?.getElementsByTagName('LongitudeDegrees')[0];
+        return {time:timeEl?new Date(timeEl.textContent).getTime():0,distanceM:distEl?Number(distEl.textContent):null,hr:valEl?Number(valEl.textContent):null,lat:latEl?Number(latEl.textContent):null,lon:lonEl?Number(lonEl.textContent):null};
+      }).filter(p=>p.time>0);
+      const lap=xmlDoc.getElementsByTagName('Lap')[0];
+      const totalTimeEl=lap?.getElementsByTagName('TotalTimeSeconds')[0];
+      const distEl=lap?.getElementsByTagName('DistanceMeters')[0];
+      const calEl=lap?.getElementsByTagName('Calories')[0];
+      const activityEl=xmlDoc.getElementsByTagName('Activity')[0];
+      const sport=activityEl?.getAttribute('Sport');
+      const meta={...summaryMeta,fileName,title:summaryMeta.title||`วิ่งจาก TCX${sport?' ('+sport+')':''}`,distanceM:summaryMeta.distanceM||Number(distEl?.textContent||0),movingSec:summaryMeta.movingSec||Number(totalTimeEl?.textContent||0),calories:summaryMeta.calories??(calEl?Number(calEl.textContent):null)};
+      parsedGpxData=buildActivityFromPoints(points,meta);
+      displayGpxModalResult(parsedGpxData);
+    }
+
+    async function processFitFile(file, fileName, summaryMeta = {}) {
+      let buffer=await file.arrayBuffer();
+      const lower=String(fileName).toLowerCase();
+      if (lower.endsWith('.gz')) buffer=await gunzipArrayBuffer(buffer);
+      const mod=await import('https://esm.sh/fit-file-parser@6.1.2?bundle');
+      const FitParser=mod.default || mod.FitParser;
+      if (!FitParser) throw new Error('โหลดตัวอ่าน FIT ไม่สำเร็จ');
+      const fitParser=new FitParser({mode:'list',speedUnit:'km/h',lengthUnit:'m',elapsedRecordField:true,force:true});
+      const data=await fitParser.parseAsync(buffer);
+      const session=data.sessions?.[0] || data.session?.[0] || {};
+      const records=data.records || [];
+      const points=records.map(r=>({
+        time:r.timestamp instanceof Date?r.timestamp.getTime():new Date(r.timestamp).getTime(),
+        lat:Number(r.position_lat),lon:Number(r.position_long),distanceM:Number(r.distance),timerSec:Number(r.timer_time),hr:Number(r.heart_rate)
+      })).filter(p=>Number.isFinite(p.time) && p.time>0);
+      if (!points.length) throw new Error('FIT ไม่มี Record ที่มีเวลาเพียงพอ');
+      const meta={
+        ...summaryMeta,
+        fileName,
+        title:summaryMeta.title||session.sport_name||session.sport||'วิ่งจาก FIT',
+        distanceM:summaryMeta.distanceM||Number(session.total_distance||0),
+        movingSec:summaryMeta.movingSec||Number(session.total_timer_time||0),
+        avgHr:summaryMeta.avgHr||Number(session.avg_heart_rate||0)||null,
+        calories:summaryMeta.calories??(Number(session.total_calories||0)||null)
+      };
+      parsedGpxData=buildActivityFromPoints(points,meta);
+      if (!parsedGpxData.distanceKm && meta.distanceM) parsedGpxData.distanceKm=Number(meta.distanceM)/1000;
+      displayGpxModalResult(parsedGpxData);
+    }
+
+    function parseSimpleCsv(text) {
+      const rows=[]; let row=[], cell='', quoted=false;
+      for(let i=0;i<text.length;i++){
+        const c=text[i], n=text[i+1];
+        if(c==='"' && quoted && n==='"'){cell+='"';i++;continue;}
+        if(c==='"'){quoted=!quoted;continue;}
+        if(c===',' && !quoted){row.push(cell);cell='';continue;}
+        if((c==='\n' || c==='\r') && !quoted){if(c==='\r'&&n==='\n')i++;row.push(cell);if(row.some(v=>String(v).trim()!==''))rows.push(row);row=[];cell='';continue;}
+        cell+=c;
+      }
+      row.push(cell); if(row.some(v=>String(v).trim()!=='')) rows.push(row);
+      if(!rows.length)return[];
+      const headers=rows[0].map(h=>String(h).trim());
+      return rows.slice(1).map(r=>Object.fromEntries(headers.map((h,i)=>[h,String(r[i]??'').trim()])));
+    }
+
+    function parseCsvNumber(v) {
+      const n=Number(String(v??'').replace(/,/g,''));
+      return Number.isFinite(n)?n:0;
+    }
+
+    function parseCsvDateToMs(v) {
+      const ms=Date.parse(v);
+      return Number.isFinite(ms)?ms:0;
+    }
+
+    async function importStravaBulkZip(file) {
+      if (typeof JSZip === 'undefined') throw new Error('ตัวอ่าน ZIP ยังโหลดไม่สำเร็จ กรุณารีเฟรชหน้าแล้วลองใหม่');
+      showToast('กำลังเปิด ZIP จาก Strava...');
+      const zip=await JSZip.loadAsync(file);
+      const names=Object.keys(zip.files).filter(n=>!zip.files[n].dir);
+      const csvName=names.find(n=>/activities\.csv$/i.test(n));
+      let csvRows=[];
+      if(csvName) csvRows=parseSimpleCsv(await zip.files[csvName].async('text'));
+      const byFilename=new Map();
+      csvRows.forEach(row=>{const fn=row['Filename']||row['filename']||row['File Name'];if(fn)byFilename.set(fn.replace(/^\.\//,''),row);});
+
+      const activityFiles=names.filter(n=>/\.(fit|gpx|tcx)(\.gz)?$/i.test(n) && /(^|\/)activities(\/|\\)/i.test(n));
+      const fallbackFiles=activityFiles.length?activityFiles:names.filter(n=>/\.(fit|gpx|tcx)(\.gz)?$/i.test(n));
+      let imported=0, skipped=0, failed=0;
+      for(let i=0;i<fallbackFiles.length;i++){
+        const name=fallbackFiles[i];
+        try{
+          showToast(`กำลังนำเข้า ${i+1}/${fallbackFiles.length}...`);
+          const entry=zip.files[name];
+          const rawName=name.replace(/^.*?activities[\\/]/i,'activities/');
+          const row=byFilename.get(rawName) || byFilename.get(name) || byFilename.get(name.replace(/^.*?\//,'')) || {};
+          const activityType=String(row['Activity Type']||row['Type']||'').toLowerCase();
+          if(activityType && !/(run|running|trail|race|treadmill|วิ่ง)/i.test(activityType)) { skipped++; continue; }
+          const meta={
+            fileName:name,
+            sourceId:`bulk:${name}`,
+            title:row['Activity Name']||row['Name']||null,
+            distanceM:parseCsvNumber(row['Distance'])||0,
+            movingSec:parseCsvDuration(row['Moving Time'])||0,
+            avgHr:parseCsvNumber(row['Average Heart Rate'])||parseCsvNumber(row['Avg HR'])||null,
+            calories:parseCsvNumber(row['Calories'])||null
+          };
+          const ext=getBaseActivityExtension(name);
+          const buf=await entry.async('arraybuffer');
+          let activity;
+          if(ext==='fit'){
+            const fake=new File([buf],name,{type:'application/octet-stream'});
+            activity=await parseFitToData(fake,name,meta);
+          }else if(ext==='gpx'){
+            activity=await parseGpxToData(new TextDecoder().decode(buf),name,meta);
+          }else{
+            activity=await parseTcxToData(new TextDecoder().decode(buf),name,meta);
+          }
+          if(saveImportedFileActivity(activity,{bulk:true})) imported++; else skipped++;
+        }catch(err){
+          failed++;
+          console.warn('Bulk activity skipped:',name,err);
+        }
+      }
+
+      // If the archive has activities.csv rows but no track files, still import running summaries. Strava's raw Distance column is meters.
+      if(!fallbackFiles.length && csvRows.length){
+        for(const row of csvRows){
+          const type=String(row['Activity Type']||row['Type']||'').toLowerCase();
+          if(type && !/(run|วิ่ง|race)/i.test(type)) continue;
+          const ms=parseCsvDateToMs(row['Activity Date']||row['Date']);
+          const dt=ms?formatImportedDate(ms):null;
+          const distanceM=parseCsvNumber(row['Distance']);
+          const movingSec=parseCsvDuration(row['Moving Time']||row['Elapsed Time']);
+          if(!ms || distanceM<=0) continue;
+          const activity={source:'file',sourceId:`bulk-csv:${row['Activity ID']||row['Filename']||ms}`,title:row['Activity Name']||'วิ่งจาก Strava CSV',date:dt.date,displayDate:dt.display,startDateIso:new Date(ms).toISOString(),startDateLocalIso:new Date(ms).toISOString(),distanceKm:distanceM/1000,durationFormatted:formatTimeSec(movingSec),paceFormatted:formatPace(movingSec/(distanceM/1000)),avgHr:parseCsvNumber(row['Average Heart Rate'])||null,calories:parseCsvNumber(row['Calories'])||null,bestEfforts:{list:[]},splits:[],pathCoordinates:[],fileName:row['Filename']||''};
+          if(saveImportedFileActivity(activity,{bulk:true})) imported++; else skipped++;
+        }
+      }
+      if(imported){syncToCloud();renderEntireApp();}
+      showToast(`นำเข้าเสร็จ: ${imported} รายการ • ข้าม ${skipped} • อ่านไม่ได้ ${failed}`);
+    }
+
+    function parseCsvDuration(v) {
+      if (v == null || v === '') return 0;
+      const s=String(v).trim();
+      if(/^\d+(\.\d+)?$/.test(s)) return Number(s);
+      const p=s.split(':').map(Number);
+      if(p.length===3 && p.every(Number.isFinite)) return p[0]*3600+p[1]*60+p[2];
+      if(p.length===2 && p.every(Number.isFinite)) return p[0]*60+p[1];
+      return 0;
+    }
+
+    async function parseFitToData(file,name,meta){
+      let buffer=await file.arrayBuffer();
+      if(String(name).toLowerCase().endsWith('.gz'))buffer=await gunzipArrayBuffer(buffer);
+      const mod=await import('https://esm.sh/fit-file-parser@6.1.2?bundle');
+      const FitParser=mod.default||mod.FitParser;
+      const parser=new FitParser({mode:'list',speedUnit:'km/h',lengthUnit:'m',elapsedRecordField:true,force:true});
+      const data=await parser.parseAsync(buffer);
+      const session=data.sessions?.[0]||{};
+      const records=data.records||[];
+      const points=records.map(r=>({time:r.timestamp instanceof Date?r.timestamp.getTime():new Date(r.timestamp).getTime(),lat:Number(r.position_lat),lon:Number(r.position_long),distanceM:Number(r.distance),timerSec:Number(r.timer_time),hr:Number(r.heart_rate)})).filter(p=>Number.isFinite(p.time)&&p.time>0);
+      if(!points.length)throw new Error('FIT ไม่มีข้อมูลเวลา');
+      return buildActivityFromPoints(points,{...meta,title:meta.title||session.sport_name||session.sport||'วิ่งจาก FIT',distanceM:meta.distanceM||Number(session.total_distance||0),movingSec:meta.movingSec||Number(session.total_timer_time||0),avgHr:meta.avgHr||Number(session.avg_heart_rate||0)||null,calories:meta.calories??(Number(session.total_calories||0)||null)});
+    }
+
+    async function parseGpxToData(xml,name,meta){
+      const doc=new DOMParser().parseFromString(xml,'application/xml');
+      const pts=Array.from(doc.getElementsByTagName('trkpt')).map(pt=>{const t=pt.getElementsByTagName('time')[0];const hr=pt.getElementsByTagName('hr')[0]||pt.getElementsByTagNameNS('*','hr')[0];return {lat:Number(pt.getAttribute('lat')),lon:Number(pt.getAttribute('lon')),time:t?new Date(t.textContent).getTime():0,hr:hr?Number(hr.textContent):null};}).filter(p=>p.time>0);
+      if(pts.length<2)throw new Error('GPX ไม่มี Track Points');
+      return buildActivityFromPoints(pts,{...meta,title:meta.title||'วิ่งจาก GPX'});
+    }
+
+    async function parseTcxToData(xml,name,meta){
+      const doc=new DOMParser().parseFromString(xml,'application/xml');
+      const pts=Array.from(doc.getElementsByTagName('Trackpoint')).map(tp=>{const t=tp.getElementsByTagName('Time')[0],d=tp.getElementsByTagName('DistanceMeters')[0],hr=tp.getElementsByTagName('HeartRateBpm')[0],hv=hr?.getElementsByTagName('Value')[0],pos=tp.getElementsByTagName('Position')[0],la=pos?.getElementsByTagName('LatitudeDegrees')[0],lo=pos?.getElementsByTagName('LongitudeDegrees')[0];return {time:t?new Date(t.textContent).getTime():0,distanceM:d?Number(d.textContent):null,hr:hv?Number(hv.textContent):null,lat:la?Number(la.textContent):null,lon:lo?Number(lo.textContent):null};}).filter(p=>p.time>0);
+      if(!pts.length)throw new Error('TCX ไม่มี Trackpoint');
+      const lap=doc.getElementsByTagName('Lap')[0];
+      const totalTime=lap?.getElementsByTagName('TotalTimeSeconds')[0];const dist=lap?.getElementsByTagName('DistanceMeters')[0];const cal=lap?.getElementsByTagName('Calories')[0];
+      return buildActivityFromPoints(pts,{...meta,title:meta.title||'วิ่งจาก TCX',distanceM:meta.distanceM||Number(dist?.textContent||0),movingSec:meta.movingSec||Number(totalTime?.textContent||0),calories:meta.calories??(cal?Number(cal.textContent):null)});
+    }
+
+    function saveImportedFileActivity(activity,{bulk=false}={}) {
+      if(!activity || !activity.sourceId)return false;
+      const existing=runHistoryList.find(a=>String(a.sourceId||'')===String(activity.sourceId));
+      if(existing)return false;
+      const newActivity={id:Date.now()+Math.floor(Math.random()*1000),source:'file',sourceId:activity.sourceId,date:activity.date,startDateIso:activity.startDateIso||null,startDateLocalIso:activity.startDateLocalIso||null,title:activity.title||'วิ่งจากไฟล์',km:Number(activity.distanceKm)||0,pace:activity.paceFormatted||'-',time:activity.durationFormatted||'-',hr:activity.avgHr||null,calories:activity.calories!=null?activity.calories:null,shoeId:null,trainingPlanId:null,splits:activity.splits||[],bestEfforts:activity.bestEfforts||{list:[]},pathCoordinates:activity.pathCoordinates||[],fileName:activity.fileName||''};
+      runHistoryList.push(newActivity);
+      return true;
+    }
+
+    function formatActivityDisplayDate(dateStr) {
+      if (!dateStr) return '-';
+      const p = String(dateStr).split('-');
+      if (p.length !== 3) return dateStr;
+      const y = Number(p[0]), m = Number(p[1]) - 1, d = Number(p[2]);
+      if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return dateStr;
+      return `${String(d).padStart(2,'0')} ${monthsThaiShort[m] || ''} ${y + 543}`;
+    }
+
+    document.getElementById("gpxActivityDateInput").addEventListener("change", (e) => {
+      if (!parsedGpxData) return;
+      const value = e.target.value;
+      if (!value) return;
+      parsedGpxData.date = value;
+      parsedGpxData.displayDate = formatActivityDisplayDate(value);
+      document.getElementById("gpxActivityDateTime").textContent = parsedGpxData.displayDate;
+    });
+
+    function displayGpxModalResult(data) {
+      document.getElementById("gpxActivityTitle").textContent = data.title || 'ผลการวิ่ง';
+      document.getElementById("gpxActivityDateTime").textContent = data.displayDate || formatActivityDisplayDate(data.date);
+      document.getElementById("gpxActivityDateInput").value = data.date || '';
+      const sourceBadge = document.getElementById("gpxSourceBadge");
+      sourceBadge.classList.toggle('hidden', !data.source || data.source !== 'file');
+      document.getElementById("gpxStatDistance").textContent = data.distanceKm.toFixed(2);
+      document.getElementById("gpxStatDuration").textContent = data.durationFormatted;
+      document.getElementById("gpxStatPace").textContent = data.paceFormatted;
+
+      // เรนเดอร์ Best Efforts จากข้อมูลที่ Strava ส่งมาเท่านั้น
+      const effortsContainer = document.getElementById("gpxBestEffortsContainer");
+      const effortList = Array.isArray(data.bestEfforts?.list) ? data.bestEfforts.list : [];
+      effortsContainer.innerHTML = effortList.length ? effortList.map(e => `
+        <div class="bg-[#121824] p-2.5 rounded-xl border border-[#1e293b] flex items-center justify-between gap-2">
+          <span class="text-slate-400">${e.label}</span>
+          <div class="text-right shrink-0">
+            <strong class="text-white font-['Inter']">${formatTimeSec(e.elapsedSec)}</strong>
+            ${e.paceSec > 0 ? `<span class="text-[10px] text-amber-400 font-mono block">${formatPace(e.paceSec)}/km</span>` : ''}
+          </div>
+        </div>`).join('') : `<span class="text-slate-500 text-[11px] col-span-2">กิจกรรมนี้ไม่มีข้อมูล Best Effort เพียงพอ</span>`;
+
+      // เรนเดอร์ Splits พร้อมกราฟแท่งแนวนอนในแถวเดียวกัน
+      const tbody = document.getElementById("gpxSplitsTableBody");
+      const splitList = Array.isArray(data.splits) ? data.splits : [];
+      const validPaces = splitList.filter(s => Number(s.distanceM) > 0 && Number(s.durationSec) > 0)
+        .map(s => Number(s.durationSec) / (Number(s.distanceM) / 1000));
+      const minPace = validPaces.length ? Math.min(...validPaces) : 0;
+      const maxPace = validPaces.length ? Math.max(...validPaces) : 0;
+      const paceRange = Math.max(maxPace - minPace, 1);
+      tbody.innerHTML = splitList.map(s => {
+        const pace = Number(s.distanceM) > 0 ? Number(s.durationSec) / (Number(s.distanceM) / 1000) : 0;
+        const width = pace > 0 && validPaces.length ? Math.round(35 + ((maxPace - pace) / paceRange) * 65) : 35;
+        return `<tr class="hover:bg-[#162030]/50 transition">
+          <td class="py-2 px-3 font-bold text-slate-200 whitespace-nowrap">${s.kmIndex}</td>
+          <td class="py-2 px-3 text-white whitespace-nowrap">${formatTimeSec(s.durationSec)}</td>
+          <td class="py-2 px-3 min-w-[90px]">${pace > 0 ? `<div class="h-2.5 rounded-full bg-[#1e293b] overflow-hidden" title="${s.paceStr}"><div class="h-full rounded-full bg-amber-400/80" style="width:${width}%"></div></div>` : '-'}</td>
+          <td class="py-2 px-3 text-amber-400 font-semibold whitespace-nowrap">${s.paceStr}</td>
+        </tr>`;
+      }).join('');
+      // อัปเดตรองเท้าและตารางซ้อม
+      const shoeSelect = document.getElementById("gpxShoeSelect");
+      shoeSelect.innerHTML = shoesList.map(s => `
+        <option value="${s.id}">👟 ${s.name} (ปัจจุบัน: ${Number(s.currentKm).toFixed(2)} กม.)</option>
+      `).join("");
+
+      const trainSelect = document.getElementById("gpxTrainingSelect");
+      trainSelect.innerHTML = `<option value="">-- ไม่เชื่อมโยง (บันทึกอิสระ) --</option>` +
+        trainingList.map(t => `<option value="${t.id}">วัน${t.day} • ${t.type} (${Number(t.planKm).toFixed(2)} กม.)</option>`).join("");
+
+      openModal("modalGpxResult");
+
+      // วาดแผนที่ Leaflet ใน modal (ให้เวลา DOM เรนเดอร์ขนาดกล่องก่อน 150ms)
+      setTimeout(() => {
+        renderLeafletMap("gpxMapContainer", data.pathCoordinates);
+      }, 150);
+    }
+
+    function renderLeafletMap(containerId, coords) {
+      if (leafletMapInstance) {
+        leafletMapInstance.remove();
+        leafletMapInstance = null;
+      }
+      if (!coords || coords.length === 0) return;
+
+      leafletMapInstance = L.map(containerId, {
+        zoomControl: true,
+        attributionControl: false
+      }).setView(coords[0], 15);
+
+      // แผนที่ Dark Theme สวยงามจาก CartoDB
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19
+      }).addTo(leafletMapInstance);
+
+      // วาดเส้นทางวิ่งสีส้ม (Polyline)
+      const polyline = L.polyline(coords, {
+        color: '#f97316',
+        weight: 4,
+        opacity: 0.9,
+        smoothFactor: 1
+      }).addTo(leafletMapInstance);
+
+      // หมุดจุดเริ่มต้น (สีเขียว) และ จุดสิ้นสุด (สีแดง)
+      L.circleMarker(coords[0], { radius: 6, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 }).addTo(leafletMapInstance);
+      L.circleMarker(coords[coords.length - 1], { radius: 6, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 1 }).addTo(leafletMapInstance);
+
+      leafletMapInstance.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+      leafletMapInstance.invalidateSize();
+    }
+
+    // เมื่อกดยืนยันบันทึกผลกิจกรรมเข้าสู่ฐานข้อมูล
+    document.getElementById("gpxSaveForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!parsedGpxData) return;
+
+      const selectedShoeId = parseInt(document.getElementById("gpxShoeSelect").value);
+      const linkedTrainingId = document.getElementById("gpxTrainingSelect").value;
+      const editedDate = document.getElementById("gpxActivityDateInput").value || parsedGpxData.date;
+      parsedGpxData.date = editedDate;
+      parsedGpxData.displayDate = formatActivityDisplayDate(editedDate);
+
+      const newActivity = {
+        id: Date.now(),
+        source: parsedGpxData.source || 'gpx',
+        sourceId: parsedGpxData.sourceId || null,
+        date: editedDate,
+        title: parsedGpxData.title,
+        km: parsedGpxData.distanceKm,
+        pace: parsedGpxData.paceFormatted,
+        time: parsedGpxData.durationFormatted,
+        hr: parsedGpxData.avgHr || null,
+        calories: parsedGpxData.calories != null ? parsedGpxData.calories : Math.round(parsedGpxData.distanceKm * 68),
+        shoeId: selectedShoeId,
+        trainingPlanId: linkedTrainingId ? Number(linkedTrainingId) : null,
+        splits: parsedGpxData.splits,
+        bestEfforts: parsedGpxData.bestEfforts || {},
+        pathCoordinates: parsedGpxData.pathCoordinates
+      };
+      if (parsedGpxData.sourceId) {
+        const duplicate = runHistoryList.find(a => String(a.sourceId || '') === String(parsedGpxData.sourceId));
+        if (duplicate) { closeModal("modalGpxResult"); showToast('กิจกรรมนี้มีอยู่ในระบบแล้ว ✓'); return; }
+      }
+      runHistoryList.push(newActivity);
+
+      // บวกสะสมระยะทางรองเท้า
+      const shoe = shoesList.find(s => s.id === selectedShoeId);
+      if (shoe && parsedGpxData.distanceKm > 0) {
+        shoe.currentKm = Math.round((Number(shoe.currentKm) + parsedGpxData.distanceKm) * 100) / 100;
+      }
+
+      // ติ๊กสถานะวิ่งแล้วในตารางซ้อม
+      if (linkedTrainingId) {
+        const trainItem = trainingList.find(t => t.id === Number(linkedTrainingId));
+        if (trainItem) {
+          trainItem.done = true;
+          trainItem.actualKm = parsedGpxData.distanceKm;
+          trainItem.shoeId = selectedShoeId;
+          trainItem.calendarActivityId = newActivity.id;
+        }
+      }
+
+      syncToCloud();
+      renderEntireApp();
+      closeModal("modalGpxResult");
+      showToast(`บันทึก ${parsedGpxData.distanceKm.toFixed(2)} กม. สำเร็จ!`);
+    });
+
+    // ========================================================
+    // STRAVA FILE IMPORT ONLY
+    // ไม่มี OAuth / Access Token / Netlify / Strava API ในเว็บนี้
+    // ผู้ใช้ส่งออกไฟล์จาก Strava แล้วนำเข้าโดยตรงจากเครื่อง
+    // ========================================================
+
+    // ----------------------------------------------------
+    // ตารางซ้อม & รองเท้า & ปฏิทิน
+    // ----------------------------------------------------
+    let isAllTrainingVisible = false;
+
+    function toggleAllTrainingView() {
+      isAllTrainingVisible = !isAllTrainingVisible;
+      const wrapper = document.getElementById("allTrainingPlanWrapper");
+      const textBtn = document.getElementById("textToggleAllTraining");
+      if (isAllTrainingVisible) {
+        wrapper.classList.remove("hidden");
+        textBtn.textContent = "ย่อตารางซ้อม";
+      } else {
+        wrapper.classList.add("hidden");
+        textBtn.textContent = "ดูตารางทั้งหมด";
+      }
+      lucide.createIcons();
+    }
+
+    function renderTraining() {
+      const weekDates = getWeekDaysDateInfo();
+      const todayItem = trainingList.find(t => t.day === currentDayName);
+      const todayContainer = document.getElementById("todayTrainingCardContainer");
+
+      if (todayItem) {
+        const todayDateObj = weekDates[todayItem.day] || { labelFormatted: "" };
+        let typeBadgeClass = "bg-slate-800 text-slate-300";
+        if (todayItem.type.includes("Easy")) typeBadgeClass = "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30";
+        if (todayItem.type.includes("Interval") || todayItem.type.includes("Tempo")) typeBadgeClass = "bg-rose-950/60 text-rose-400 border border-rose-500/30";
+        if (todayItem.type.includes("RACE")) typeBadgeClass = "bg-purple-950/60 text-purple-400 border border-purple-500/30";
+
+        const shoeOptions = shoesList.map(s => `
+          <option value="${s.id}" ${s.id === Number(todayItem.shoeId) ? 'selected' : ''}>👟 ${s.name}</option>
+        `).join("");
+
+        todayContainer.innerHTML = `
+          <div class="p-5 rounded-3xl bg-gradient-to-br from-[#121824] to-[#1a2332] border ${todayItem.done ? 'border-emerald-500/50 shadow-lg shadow-emerald-950/30' : 'border-amber-500/30 shadow-lg shadow-black/40'} flex flex-col gap-3.5 transition">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-amber-400/20 text-amber-300 border border-amber-400/30">วันนี้</span>
+                  <span class="text-xs font-semibold text-slate-300">${todayDateObj.labelFormatted}</span>
+                </div>
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="text-sm font-bold px-2.5 py-1 rounded-xl ${typeBadgeClass}">${todayItem.type}</span>
+                  <span class="text-base font-extrabold text-white font-['Inter']">เป้า: ${Number(todayItem.planKm).toFixed(2)} กม.</span>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button onclick="toggleTrainingDone(${todayItem.id})" class="px-4 py-2 rounded-2xl border flex items-center gap-1.5 transition text-xs font-bold ${todayItem.done ? 'bg-emerald-400 border-emerald-400 text-[#090d14] shadow-md shadow-emerald-400/20' : 'border-slate-600 text-slate-200 hover:border-slate-400 bg-slate-800/40'}">
+                  <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
+                  <span>${todayItem.done ? 'วิ่งแล้ว' : 'กดติ๊กวิ่ง'}</span>
+                </button>
+                <button onclick="editTraining(${todayItem.id})" class="p-2 rounded-xl text-slate-500 hover:text-white bg-slate-800/40">
+                  <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+
+            ${todayItem.desc ? `<p class="text-xs text-slate-300 bg-[#090d14]/60 p-2.5 rounded-xl border border-[#1e293b]">${todayItem.desc}</p>` : ''}
+
+            <div class="flex items-center justify-between gap-2 pt-2 border-t border-[#1e293b] flex-wrap">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-medium text-slate-400">วิ่งจริง:</span>
+                <div class="flex items-center bg-[#090d14] border border-[#1e293b] rounded-xl overflow-hidden focus-within:border-slate-400">
+                  <input type="number" step="0.01" value="${Number(todayItem.actualKm !== undefined ? todayItem.actualKm : todayItem.planKm).toFixed(2)}" onchange="updateActualKm(${todayItem.id}, this.value)" ${todayItem.done ? 'disabled' : ''} class="w-20 bg-transparent px-2.5 py-1.5 text-xs text-white text-center font-['Inter'] font-bold focus:outline-none disabled:opacity-60">
+                  <span class="text-[11px] text-slate-400 px-2 bg-[#121824] border-l border-[#1e293b]">กม.</span>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-medium text-slate-400">รองเท้า:</span>
+                <select onchange="updateTrainingShoe(${todayItem.id}, this.value)" ${todayItem.done ? 'disabled' : ''} class="bg-[#090d14] border border-[#1e293b] rounded-xl px-2.5 py-1.5 text-xs text-slate-300 max-w-[150px] truncate focus:outline-none disabled:opacity-60">
+                  ${shoeOptions}
+                </select>
+              </div>
+            </div>
+
+            ${todayItem.done ? `
+              <div class="text-[11px] text-emerald-400 flex items-center gap-1.5 bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+                <i data-lucide="calendar-check" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                <span>ซิงค์ลงในปฏิทินและสะสมระยะรองเท้าเรียบร้อยแล้ว</span>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      } else {
+        todayContainer.innerHTML = `
+          <div class="p-5 rounded-3xl bg-[#121824] border border-[#1e293b] text-center py-6">
+            <span class="text-xs text-slate-400">ไม่มีตารางซ้อมที่บันทึกไว้สำหรับวัน${currentDayName}</span>
+          </div>
+        `;
+      }
+
+      const listContainer = document.getElementById("weeklyPlanContainer");
+      listContainer.innerHTML = trainingList.map(t => {
+        const dObj = weekDates[t.day] || { labelFormatted: "" };
+        const isToday = (t.day === currentDayName);
+
+        let typeBadgeClass = "bg-slate-800 text-slate-400";
+        if (t.type.includes("Easy")) typeBadgeClass = "bg-emerald-950/40 text-emerald-400 border border-emerald-500/30";
+        if (t.type.includes("Interval") || t.type.includes("Tempo")) typeBadgeClass = "bg-rose-950/40 text-rose-400 border border-rose-500/30";
+        if (t.type.includes("RACE")) typeBadgeClass = "bg-purple-950/40 text-purple-400 border border-purple-500/30";
+
+        return `
+          <div class="flex flex-col gap-2 p-3.5 rounded-2xl bg-[#121824] border ${isToday ? 'border-amber-400/50 shadow-md' : 'border-[#1e293b]'} transition">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="flex flex-col">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold ${isToday ? 'text-amber-400' : 'text-white'}">วัน${t.day}</span>
+                    ${isToday ? '<span class="text-[9px] bg-amber-400/20 text-amber-300 px-1.5 rounded">วันนี้</span>' : ''}
+                  </div>
+                  <span class="text-[10px] text-slate-400 font-mono">${dObj.labelFormatted}</span>
+                </div>
+                <span class="text-xs font-bold px-2 py-0.5 rounded-md ${typeBadgeClass}">${t.type}</span>
+                <span class="text-xs text-slate-400">แผน: <strong class="text-white font-['Inter']">${Number(t.planKm).toFixed(2)} กม.</strong></span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button onclick="toggleTrainingDone(${t.id})" class="px-2.5 py-1 rounded-xl border flex items-center gap-1 text-[11px] font-bold ${t.done ? 'bg-emerald-400 border-emerald-400 text-[#090d14]' : 'border-slate-600 text-slate-300'}">
+                  <i data-lucide="check" class="w-3 h-3 stroke-[3]"></i>
+                  <span>${t.done ? 'วิ่งแล้ว' : 'วิ่ง'}</span>
+                </button>
+                <button onclick="editTraining(${t.id})" class="p-1 text-slate-500 hover:text-white">
+                  <i data-lucide="pencil" class="w-3 h-3"></i>
+                </button>
+              </div>
+            </div>
+
+            ${t.desc ? `<p class="text-[11px] text-slate-400 truncate">${t.desc}</p>` : ''}
+          </div>
+        `;
+      }).join("");
+
+      lucide.createIcons();
+    }
+
+    function updateActualKm(id, val) {
+      const item = trainingList.find(t => t.id === id);
+      if (item) {
+        item.actualKm = parseFloat(val) || 0;
+        syncToCloud();
+      }
+    }
+
+    function updateTrainingShoe(id, shoeId) {
+      const item = trainingList.find(t => t.id === id);
+      if (item) {
+        item.shoeId = Number(shoeId);
+        syncToCloud();
+      }
+    }
+
+    function toggleTrainingDone(id) {
+      const item = trainingList.find(t => t.id === id);
+      if (!item) return;
+
+      const weekDates = getWeekDaysDateInfo();
+      const targetDate = weekDates[item.day] ? weekDates[item.day].dateStr : `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      const kmToAdd = parseFloat(item.actualKm !== undefined ? item.actualKm : item.planKm) || 0;
+      const targetShoe = shoesList.find(s => s.id === Number(item.shoeId)) || shoesList[0];
+
+      if (!item.done) {
+        const newActId = Date.now();
+        runHistoryList.push({
+          id: newActId,
+          date: targetDate,
+          title: `ซ้อม ${item.type} (${item.day})`,
+          km: kmToAdd,
+          pace: "-",
+          time: "-",
+          shoeId: targetShoe ? targetShoe.id : null,
+          trainingPlanId: item.id,
+          bestEfforts: {}
+        });
+        item.calendarActivityId = newActId;
+
+        if (targetShoe && kmToAdd > 0) {
+          targetShoe.currentKm = Math.round((Number(targetShoe.currentKm) + kmToAdd) * 100) / 100;
+        }
+        item.done = true;
+        showToast(`บันทึก ${kmToAdd.toFixed(2)} กม. เรียบร้อยแล้ว`);
+      } else {
+        if (item.calendarActivityId) {
+          runHistoryList = runHistoryList.filter(a => a.id !== item.calendarActivityId);
+        } else {
+          runHistoryList = runHistoryList.filter(a => a.trainingPlanId !== item.id);
+        }
+        item.calendarActivityId = null;
+
+        if (targetShoe && kmToAdd > 0) {
+          targetShoe.currentKm = Math.max(0, Math.round((Number(targetShoe.currentKm) - kmToAdd) * 100) / 100);
+        }
+        item.done = false;
+        showToast(`ยกเลิกและหักลบคืนระยะรองเท้าแล้ว`);
+      }
+
+      syncToCloud();
+      renderEntireApp();
+    }
+
+    function openAddTrainingModal() {
+      document.getElementById("trainingModalTitle").textContent = "เพิ่มตารางซ้อม";
+      document.getElementById("trainingEditId").value = "";
+      document.getElementById("trainingForm").reset();
+      document.getElementById("deleteTrainBtn").classList.add("hidden");
+      openModal('modalTraining');
+    }
+
+    function editTraining(id) {
+      const item = trainingList.find(t => t.id === id);
+      if (!item) return;
+      document.getElementById("trainingModalTitle").textContent = "แก้ไขตารางซ้อม";
+      document.getElementById("trainingEditId").value = item.id;
+      document.getElementById("trainDay").value = item.day;
+      document.getElementById("trainKm").value = Number(item.planKm).toFixed(2);
+      document.getElementById("trainType").value = item.type;
+      document.getElementById("trainDesc").value = item.desc || "";
+      document.getElementById("deleteTrainBtn").classList.remove("hidden");
+      openModal('modalTraining');
+    }
+
+    document.getElementById("deleteTrainBtn").addEventListener("click", () => {
+      const id = Number(document.getElementById("trainingEditId").value);
+      if (id && confirm("ต้องการลบตารางซ้อมนี้ใช่หรือไม่?")) {
+        trainingList = trainingList.filter(t => t.id !== id);
+        syncToCloud();
+        renderEntireApp();
+        closeModal('modalTraining');
+      }
+    });
+
+    document.getElementById("trainingForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const editId = document.getElementById("trainingEditId").value;
+      const planVal = parseFloat(document.getElementById("trainKm").value) || 0;
+      const data = {
+        day: document.getElementById("trainDay").value,
+        planKm: planVal,
+        actualKm: planVal,
+        type: document.getElementById("trainType").value,
+        desc: document.getElementById("trainDesc").value.trim()
+      };
+
+      if (editId) {
+        const item = trainingList.find(t => t.id === Number(editId));
+        if (item) Object.assign(item, data);
+      } else {
+        const defaultShoeId = shoesList[0] ? shoesList[0].id : 1;
+        trainingList.push({ id: Date.now(), ...data, shoeId: defaultShoeId, done: false, calendarActivityId: null });
+      }
+      syncToCloud();
+      renderEntireApp();
+      closeModal('modalTraining');
+    });
+
+    function openManualRunModal() {
+      const nowStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      document.getElementById("runInputDate").value = nowStr;
+      document.getElementById("runInputTitle").value = "วิ่งออกกำลังกาย";
+      document.getElementById("runInputKm").value = "";
+      document.getElementById("runInputDuration").value = "";
+      document.getElementById("runInputPace").value = "";
+
+      const linkSelect = document.getElementById("runLinkTrainingSelect");
+      linkSelect.innerHTML = `<option value="">-- ไม่เชื่อมโยง (บันทึกเป็นกิจกรรมอิสระ) --</option>` +
+        trainingList.map(t => `<option value="${t.id}">วัน${t.day} • ${t.type} (${Number(t.planKm).toFixed(2)} กม.)</option>`).join("");
+
+      const shoeSelect = document.getElementById("runShoeSelect");
+      shoeSelect.innerHTML = shoesList.map(s => `
+        <option value="${s.id}">👟 ${s.name} (ปัจจุบัน: ${Number(s.currentKm).toFixed(2)} กม.)</option>
+      `).join("");
+
+      openModal("modalManualRun");
+    }
+
+    document.getElementById("manualRunForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const titleVal = document.getElementById("runInputTitle").value.trim() || "วิ่งออกกำลังกาย";
+      const dateVal = document.getElementById("runInputDate").value;
+      const kmVal = parseFloat(document.getElementById("runInputKm").value) || 0;
+      const paceVal = document.getElementById("runInputPace").value.trim();
+      const durVal = document.getElementById("runInputDuration").value.trim();
+      const selectedShoeId = parseInt(document.getElementById("runShoeSelect").value);
+      const linkedTrainingId = document.getElementById("runLinkTrainingSelect").value;
+
+      const newActivity = {
+        id: Date.now(),
+        date: dateVal,
+        title: titleVal,
+        km: kmVal,
+        pace: paceVal || "-",
+        time: durVal || "-",
+        hr: null,
+        calories: Math.round(kmVal * 68),
+        bestEfforts: {},
+        notes: '',
+        shoeId: selectedShoeId,
+        trainingPlanId: linkedTrainingId ? Number(linkedTrainingId) : null
+      };
+      runHistoryList.push(newActivity);
+
+      const shoe = shoesList.find(s => s.id === selectedShoeId);
+      if (shoe && kmVal > 0) {
+        shoe.currentKm = Math.round((Number(shoe.currentKm) + kmVal) * 100) / 100;
+      }
+
+      if (linkedTrainingId) {
+        const trainItem = trainingList.find(t => t.id === Number(linkedTrainingId));
+        if (trainItem) {
+          trainItem.done = true;
+          trainItem.actualKm = kmVal;
+          trainItem.shoeId = selectedShoeId;
+          trainItem.calendarActivityId = newActivity.id;
+        }
+      }
+
+      syncToCloud();
+      renderEntireApp();
+      closeModal("modalManualRun");
+      showToast(`บันทึก ${kmVal.toFixed(2)} กม. เรียบร้อยแล้ว`);
+    });
+
+    // รองเท้า
+    let currentShoePhotoBase64 = "";
+
+    function parseDurationToSec(value) {
+      if (value == null || value === '' || value === '-') return 0;
+      const m = String(value).trim().match(/^(\d+):([0-5]?\d)(?::([0-5]?\d))?$/);
+      if (!m) return 0;
+      return m[3] != null ? Number(m[1])*3600 + Number(m[2])*60 + Number(m[3]) : Number(m[1])*60 + Number(m[2]);
+    }
+
+    function parsePaceToSec(value) {
+      if (value == null || value === '' || value === '-') return 0;
+      const m = String(value).match(/(\d+)\s*[':]\s*(\d{1,2})/);
+      return m ? Number(m[1])*60 + Number(m[2]) : 0;
+    }
+
+    function activityTimeSec(act) {
+      const direct = parseDurationToSec(act.time);
+      if (direct) return direct;
+      const pace = parsePaceToSec(act.pace);
+      return pace && Number(act.km) > 0 ? pace * Number(act.km) : 0;
+    }
+
+    function getActivityIntensity(act) {
+      const txt = `${act.title || ''} ${act.type || ''}`.toLowerCase();
+      if (/interval|tempo|threshold|speed/.test(txt)) return 1.4;
+      if (/race|แข่งขัน/.test(txt)) return 1.5;
+      if (/long|ยาว/.test(txt)) return 1.1;
+      return 1.0;
+    }
+
+    function populateStatsMonthOptions() {
+      const el = document.getElementById('statsPeriodSelect');
+      if (!el) return;
+      const current = el.value || 'all';
+      const months = new Set();
+      const now = new Date();
+      const addMonth = (y, m) => months.add(`${y}-${String(m + 1).padStart(2, '0')}`);
+      addMonth(now.getFullYear(), now.getMonth());
+      runHistoryList.forEach(a => {
+        const m = String(a.date || '').match(/^(\d{4})-(\d{2})/);
+        if (m) months.add(`${m[1]}-${m[2]}`);
+      });
+      const sorted = [...months].sort((a,b) => b.localeCompare(a));
+      const monthNames = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+      el.innerHTML = `<option value="all">ทั้งหมด</option>` + sorted.map(key => {
+        const [y,m] = key.split('-').map(Number);
+        return `<option value="${key}">${monthNames[m-1]} ${y + 543}</option>`;
+      }).join('');
+      if (current === 'all' || sorted.includes(current)) el.value = current;
+      else el.value = sorted[0] || 'all';
+    }
+
+    function renderRunStats() {
+      const periodEl = document.getElementById('statsPeriodSelect');
+      if (!periodEl) return;
+      populateStatsMonthOptions();
+      const period = periodEl.value;
+      let activities = [...runHistoryList];
+      if (period !== 'all') {
+        activities = activities.filter(a => String(a.date || '').slice(0, 7) === period);
+      }
+      const km = activities.reduce((s,a)=>s+(Number(a.km)||0),0);
+      const secs = activities.reduce((s,a)=>s+activityTimeSec(a),0);
+      const avgPaceSec = km > 0 && secs > 0 ? secs/km : 0;
+      const longest = activities.reduce((m,a)=>Math.max(m,Number(a.km)||0),0);
+      document.getElementById('runStatsSummary').innerHTML = [
+        ['ระยะรวม', `${km.toFixed(2)} กม.`, 'text-emerald-400'],
+        ['จำนวนครั้ง', `${activities.length}`, 'text-white'],
+        ['Pace เฉลี่ย', avgPaceSec ? formatPace(avgPaceSec) : '-', 'text-amber-400'],
+        ['ไกลสุด', `${longest.toFixed(2)} กม.`, 'text-cyan-400']
+      ].map(x=>`<div class="bg-[#090d14] border border-[#1e293b] rounded-2xl p-3"><div class="text-[9px] text-slate-500">${x[0]}</div><div class="text-base font-black ${x[2]} font-['Inter'] mt-1">${x[1]}</div></div>`).join('');
+
+      const pbDefs = [
+        ['400 ม.','400mSec'],['ครึ่งไมล์','halfMileSec'],['1 กม.','1kSec'],['1 ไมล์','1mileSec'],
+        ['2 ไมล์','2mileSec'],['5 กม.','5kSec'],['10 กม.','10kSec'],['15 กม.','15kSec'],
+        ['10 ไมล์','10mileSec'],['20 กม.','20kSec'],['ฮาล์ฟ','halfMarathonSec'],['มาราธอน','marathonSec']
+      ];
+      const pb = {};
+      pbDefs.forEach(([label,key])=>{
+        let best = Infinity;
+        activities.forEach(a=>{
+          const list = Array.isArray(a.bestEfforts?.list) ? a.bestEfforts.list : [];
+          const found = list.find(e=>`${e.key}Sec`===key);
+          const v = found ? Number(found.elapsedSec) : Number(a.bestEfforts?.[key]);
+          if (v > 0) best = Math.min(best,v);
+        });
+        pb[key] = isFinite(best) ? best : null;
+      });
+      document.getElementById('personalBestContainer').innerHTML = pbDefs.map(([label,key])=>`<div class="rounded-xl bg-[#121824] border border-[#1e293b] p-2"><div class="text-[9px] text-slate-500">${label}</div><div class="text-sm font-black text-white font-['Inter'] mt-0.5">${pb[key] ? formatTimeSec(pb[key]) : '-'}</div></div>`).join('');
+
+      const load7 = runHistoryList.filter(a=>{const d=new Date(`${a.date||''}T12:00:00`); const st=new Date(); st.setDate(st.getDate()-6); st.setHours(0,0,0,0); return d>=st;});
+      const load = load7.reduce((s,a)=>s+(Number(a.km)||0)*getActivityIntensity(a),0);
+      const easyKm = load7.filter(a=>getActivityIntensity(a)===1).reduce((s,a)=>s+(Number(a.km)||0),0);
+      const hardKm = load7.filter(a=>getActivityIntensity(a)>1).reduce((s,a)=>s+(Number(a.km)||0),0);
+      document.getElementById('trainingLoadWindow').textContent = `7 วัน • ${load.toFixed(1)} คะแนน`;
+      document.getElementById('trainingLoadContainer').innerHTML = `<div class="text-2xl font-black text-cyan-400 font-['Inter']">${load.toFixed(1)}</div><div class="text-[10px] text-slate-500 mt-1">Easy/ปกติ ${easyKm.toFixed(1)} กม. · เร็ว/หนัก ${hardKm.toFixed(1)} กม.</div><div class="w-full h-2 bg-[#1e293b] rounded-full overflow-hidden mt-3"><div class="h-full bg-cyan-400" style="width:${Math.min(load/80*100,100)}%"></div></div>`;
+
+      const weeks=[]; const anchor=new Date(); anchor.setHours(23,59,59,999);
+      for(let i=3;i>=0;i--){ const end=new Date(anchor); end.setDate(end.getDate()-i*7); const start=new Date(end); start.setDate(start.getDate()-6); const wkm=runHistoryList.filter(a=>{const d=new Date(`${a.date||''}T12:00:00`); return d>=start&&d<=end;}).reduce((s,a)=>s+(Number(a.km)||0),0); weeks.push({label:`${String(start.getDate()).padStart(2,'0')}`,km:wkm}); }
+      const maxW=Math.max(...weeks.map(w=>w.km),1);
+      document.getElementById('weeklyDistanceBars').innerHTML=weeks.map(w=>`<div class="flex flex-col items-center justify-end h-full gap-1"><span class="text-[9px] text-slate-400 font-['Inter']">${w.km.toFixed(1)}</span><div class="w-full max-w-10 rounded-t-lg bg-cyan-400/70" style="height:${Math.max(6,w.km/maxW*72)}px"></div><span class="text-[9px] text-slate-600">${w.label}</span></div>`).join('');
+    }
+
+    function renderShoes() {
+      const container = document.getElementById("shoeListContainer");
+      if (shoesList.length === 0) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-500 text-xs">ยังไม่มีรองเท้าในระบบ กดปุ่ม + เพื่อเพิ่ม</div>`;
+        return;
+      }
+
+      container.innerHTML = shoesList.map(s => {
+        const percent = Math.min(Math.round((s.currentKm / s.maxKm) * 100), 100);
+        const isNearMax = percent >= 80;
+        const shoeActs = runHistoryList.filter(a => Number(a.shoeId) === Number(s.id));
+        const shoeKmFromHistory = shoeActs.reduce((sum,a)=>sum+(Number(a.km)||0),0);
+        const shoeSecs = shoeActs.reduce((sum,a)=>sum+activityTimeSec(a),0);
+        const shoeAvgPace = shoeKmFromHistory > 0 && shoeSecs > 0 ? formatPace(shoeSecs/shoeKmFromHistory) : '-';
+
+        const photoHtml = s.image
+          ? `<img src="${s.image}" class="w-12 h-12 rounded-2xl object-cover border border-slate-700 flex-shrink-0" alt="${s.name}">`
+          : `<div class="w-12 h-12 rounded-2xl bg-[#090d14] border border-[#1e293b] flex items-center justify-center flex-shrink-0 text-slate-500"><i data-lucide="footprints" class="w-5 h-5"></i></div>`;
+
+        return `
+          <div class="flex flex-col gap-2.5 p-4 rounded-3xl bg-[#090d14] border border-[#1e293b]">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                ${photoHtml}
+                <div class="flex flex-col">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs sm:text-sm font-bold text-white">${s.name}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-md ${isNearMax ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-slate-400'}">${s.badge || 'รองเท้าวิ่ง'}</span>
+                  </div>
+                  <span class="text-[11px] text-slate-400 mt-0.5">${percent}% ของอายุการใช้งาน</span>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button onclick="editShoe(${s.id})" class="p-1.5 rounded-xl text-slate-400 hover:text-white bg-[#121824]">
+                  <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs mt-1">
+              <span class="text-[11px] text-slate-400">ระยะสะสม:</span>
+              <span class="font-bold text-white font-['Inter']">${Number(s.currentKm).toFixed(2)} / ${Number(s.maxKm).toFixed(2)} กม.</span>
+            </div>
+
+            <div class="w-full bg-[#1e293b] h-2 rounded-full overflow-hidden">
+              <div class="h-full ${isNearMax ? 'bg-rose-400' : 'bg-[#6ee7b7]'} transition-all duration-300" style="width: ${percent}%"></div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 pt-1">
+              <div class="text-[9px] text-slate-500">กิจกรรม <strong class="block text-slate-300 text-[11px] font-['Inter']">${shoeActs.length}</strong></div>
+              <div class="text-[9px] text-slate-500">จากประวัติ <strong class="block text-slate-300 text-[11px] font-['Inter']">${shoeKmFromHistory.toFixed(1)} กม.</strong></div>
+              <div class="text-[9px] text-slate-500">Pace เฉลี่ย <strong class="block text-amber-400 text-[11px] font-['Inter']">${shoeAvgPace}</strong></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+      lucide.createIcons();
+    }
+
+    const shoeFileInput = document.getElementById("shoeImageFileInput");
+    shoeFileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxDim = 240;
+          let w = img.width, h = img.height;
+          if (w > h) { if (w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; } }
+          else { if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; } }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          currentShoePhotoBase64 = canvas.toDataURL("image/jpeg", 0.82);
+          showShoePhotoPreview(currentShoePhotoBase64);
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function showShoePhotoPreview(url) {
+      const previewImg = document.getElementById("shoePreviewImg");
+      const defaultIcon = document.getElementById("shoeDefaultIcon");
+      const removeBtn = document.getElementById("removeShoeImgBtn");
+      if (url) {
+        previewImg.src = url;
+        previewImg.classList.remove("hidden");
+        defaultIcon.classList.add("hidden");
+        removeBtn.classList.remove("hidden");
+      } else {
+        previewImg.src = "";
+        previewImg.classList.add("hidden");
+        defaultIcon.classList.remove("hidden");
+        removeBtn.classList.add("hidden");
+      }
+    }
+
+    document.getElementById("removeShoeImgBtn").addEventListener("click", () => {
+      currentShoePhotoBase64 = "";
+      shoeFileInput.value = "";
+      showShoePhotoPreview("");
+    });
+
+    function openAddShoeModal() {
+      document.getElementById("shoeModalTitle").textContent = "เพิ่มรองเท้าวิ่ง";
+      document.getElementById("shoeEditId").value = "";
+      document.getElementById("shoeForm").reset();
+      currentShoePhotoBase64 = "";
+      showShoePhotoPreview("");
+      document.getElementById("deleteShoeBtn").classList.add("hidden");
+      openModal('modalShoe');
+    }
+
+    function editShoe(id) {
+      const item = shoesList.find(s => s.id === id);
+      if (!item) return;
+      document.getElementById("shoeModalTitle").textContent = "แก้ไขข้อมูลรองเท้า";
+      document.getElementById("shoeEditId").value = item.id;
+      document.getElementById("shoeName").value = item.name;
+      document.getElementById("shoeCurrentKm").value = Number(item.currentKm).toFixed(2);
+      document.getElementById("shoeMaxKm").value = Number(item.maxKm).toFixed(2);
+      document.getElementById("shoeBadge").value = item.badge || "";
+      currentShoePhotoBase64 = item.image || "";
+      showShoePhotoPreview(currentShoePhotoBase64);
+      document.getElementById("deleteShoeBtn").classList.remove("hidden");
+      openModal('modalShoe');
+    }
+
+    document.getElementById("deleteShoeBtn").addEventListener("click", () => {
+      const id = Number(document.getElementById("shoeEditId").value);
+      if (id && confirm("ต้องการลบรองเท้าคู่นี้ใช่หรือไม่?")) {
+        shoesList = shoesList.filter(s => s.id !== id);
+        syncToCloud();
+        renderEntireApp();
+        closeModal('modalShoe');
+      }
+    });
+
+    document.getElementById("shoeForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const editId = document.getElementById("shoeEditId").value;
+      const data = {
+        name: document.getElementById("shoeName").value.trim(),
+        currentKm: parseFloat(document.getElementById("shoeCurrentKm").value) || 0,
+        maxKm: parseFloat(document.getElementById("shoeMaxKm").value) || 600.00,
+        badge: document.getElementById("shoeBadge").value.trim(),
+        image: currentShoePhotoBase64
+      };
+
+      if (editId) {
+        const item = shoesList.find(s => s.id === Number(editId));
+        if (item) Object.assign(item, data);
+      } else {
+        shoesList.push({ id: Date.now(), ...data });
+      }
+      syncToCloud();
+      renderEntireApp();
+      closeModal('modalShoe');
+    });
+
+    // ปฏิทิน
+    let currentCalDate = new Date(2026, 8, 1);
+
+    function prevMonth() { currentCalDate.setMonth(currentCalDate.getMonth() - 1); renderCalendar(); }
+    function nextMonth() { currentCalDate.setMonth(currentCalDate.getMonth() + 1); renderCalendar(); }
+
+    function renderCalendar() {
+      const year = currentCalDate.getFullYear();
+      const month = currentCalDate.getMonth();
+      document.getElementById("calendarMonthTitle").textContent = `${monthsThai[month]} ${year + 543}`;
+
+      const firstDayIndex = new Date(year, month, 1).getDay();
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const prevLastDay = new Date(year, month, 0).getDate();
+
+      const grid = document.getElementById("calendarDaysGrid");
+      let html = "";
+      let monthlyKm = 0;
+
+      for (let x = firstDayIndex; x > 0; x--) {
+        html += `<div class="p-1 min-h-[50px] rounded-xl bg-[#090d14]/40 border border-transparent text-slate-700 text-xs flex flex-col items-center justify-start opacity-30">${prevLastDay - x + 1}</div>`;
+      }
+
+      for (let i = 1; i <= lastDay; i++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+        const runsOnDay = runHistoryList.filter(r => r.date === dateStr);
+        const isRaceDay = (raceTarget.date && raceTarget.date === dateStr);
+
+        let badgeHtml = "";
+        if (runsOnDay.length > 0) {
+          const sumKm = runsOnDay.reduce((acc, curr) => acc + (parseFloat(curr.km) || 0), 0);
+          monthlyKm += sumKm;
+          badgeHtml += `<span class="mt-1 text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-400/20 text-emerald-300 font-['Inter']">${sumKm.toFixed(2)}k</span>`;
+        }
+        if (isRaceDay) {
+          badgeHtml += `<span class="mt-0.5 text-[9px] font-bold px-1 rounded bg-purple-500/20 text-purple-300">🏁 แข่ง</span>`;
+        }
+
+        const isToday = (today.getFullYear() === year && today.getMonth() === month && today.getDate() === i);
+
+        html += `
+          <div onclick="openDayDetailModal('${dateStr}')" class="p-1 min-h-[50px] rounded-xl bg-[#090d14] cursor-pointer hover:border-slate-500 transition border ${isToday ? 'border-emerald-400 shadow-sm shadow-emerald-500/20' : 'border-[#1e293b]'} flex flex-col items-center justify-start">
+            <span class="text-xs font-semibold ${isToday ? 'text-emerald-400 font-bold' : 'text-slate-300'} font-['Inter']">${i}</span>
+            ${badgeHtml}
+          </div>
+        `;
+      }
+
+      grid.innerHTML = html;
+      document.getElementById("calendarMonthlyKmSum").innerHTML = `รวมเดือนนี้: <strong class="text-white font-['Inter']">${monthlyKm.toFixed(2)} กม.</strong>`;
+      lucide.createIcons();
+    }
+
+    let dayDetailMapInstances = {};
+
+    function clearDayDetailMaps() {
+      Object.values(dayDetailMapInstances).forEach(map => {
+        try { map.remove(); } catch (_) {}
+      });
+      dayDetailMapInstances = {};
+    }
+
+    function renderDayDetailMap(containerId, coords) {
+      if (dayDetailMapInstances[containerId]) {
+        try { dayDetailMapInstances[containerId].remove(); } catch (_) {}
+        delete dayDetailMapInstances[containerId];
+      }
+      if (!coords || coords.length < 2 || !document.getElementById(containerId)) return;
+
+      // ลดจำนวนจุดบนแผนที่เพื่อให้หน้าโหลดเบา แต่ยังคงรูปทรงเส้นทางไว้
+      const maxPoints = 350;
+      let mapCoords = coords;
+      if (coords.length > maxPoints) {
+        const step = Math.ceil(coords.length / maxPoints);
+        mapCoords = coords.filter((_, i) => i % step === 0);
+        if (mapCoords[mapCoords.length - 1] !== coords[coords.length - 1]) mapCoords.push(coords[coords.length - 1]);
+      }
+
+      const mapInstance = L.map(containerId, {
+        zoomControl: false,
+        attributionControl: false,
+        dragging: true,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        touchZoom: true
+      });
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 14,
+        minZoom: 11
+      }).addTo(mapInstance);
+      dayDetailMapInstances[containerId] = mapInstance;
+
+      const polyline = L.polyline(mapCoords, {
+        color: '#f97316',
+        weight: 3,
+        opacity: 0.9,
+        smoothFactor: 1.5
+      }).addTo(mapInstance);
+
+      L.circleMarker(mapCoords[0], { radius: 5, color: '#10b981', fillColor: '#10b981', fillOpacity: 1, weight: 2 }).addTo(mapInstance);
+      L.circleMarker(mapCoords[mapCoords.length - 1], { radius: 5, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 1, weight: 2 }).addTo(mapInstance);
+
+      mapInstance.fitBounds(polyline.getBounds(), { padding: [16, 16], maxZoom: 14 });
+      setTimeout(() => dayDetailMapInstances[containerId] && dayDetailMapInstances[containerId].invalidateSize(), 80);
+    }
+
+    function openDayDetailModal(dateStr) {
+      const p = dateStr.split("-");
+      const titleStr = `${parseInt(p[2])} ${monthsThaiShort[parseInt(p[1]) - 1]} ${parseInt(p[0]) + 543}`;
+      document.getElementById("dayDetailTitle").textContent = titleStr;
+      document.getElementById("dayDetailSub").textContent = "กิจกรรมวิ่งในวันนี้";
+
+      const activities = runHistoryList.filter(r => r.date === dateStr);
+      const isRace = (raceTarget.date && raceTarget.date === dateStr);
+      const container = document.getElementById("dayActivitiesList");
+
+      clearDayDetailMaps();
+
+      if (activities.length === 0 && !isRace) {
+        container.innerHTML = `
+          <div class="text-center py-10 text-slate-500 text-xs flex flex-col items-center gap-2">
+            <i data-lucide="calendar-off" class="w-6 h-6 stroke-1"></i>
+            <span>ไม่มีบันทึกกิจกรรมวันนี้</span>
+          </div>
+        `;
+        openModal("modalDayDetail");
+        lucide.createIcons();
+        return;
+      }
+
+      let content = "";
+      if (isRace) {
+        content += `
+          <div class="p-3.5 rounded-2xl bg-purple-950/30 border border-purple-500/30 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="text-xl">🏁</span>
+              <div class="min-w-0">
+                <span class="text-xs font-bold text-purple-300 truncate block">${raceTarget.name}</span>
+                <p class="text-[10px] text-slate-400 mt-0.5">${Number(raceTarget.distance).toFixed(2)} กม. • เป้า ${raceTarget.pace || '-'} • ${raceTarget.timeVal ? `${raceTarget.timeVal}${raceTarget.timeUnit}` : '-'}</p>
+              </div>
+            </div>
+            <button onclick="deleteRaceFromCalendar()" class="p-2 rounded-xl text-rose-400 hover:bg-rose-500/10" title="ลบการแข่ง">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        `;
+      }
+
+      content += activities.map((act, idx) => {
+        const shoe = shoesList.find(s => s.id === act.shoeId);
+        const sourceLabel = act.source === 'strava' ? 'STRAVA' : (act.source === 'gpx' ? 'GPX' : 'บันทึกเอง');
+        const hasMap = Array.isArray(act.pathCoordinates) && act.pathCoordinates.length > 1;
+        const mapId = `dayRunMap_${act.id}`;
+        const splits = Array.isArray(act.splits) ? act.splits : [];
+        const calendarValidPaces = splits.filter(s=>Number(s.distanceM)>0 && Number(s.durationSec)>0).map(s=>Number(s.durationSec)/(Number(s.distanceM)/1000));
+        const calendarMinPace = calendarValidPaces.length ? Math.min(...calendarValidPaces) : 0;
+        const calendarMaxPace = calendarValidPaces.length ? Math.max(...calendarValidPaces) : 0;
+        const calendarPaceRange = Math.max(calendarMaxPace-calendarMinPace,1);
+        const splitRows = splits.slice(0, 8).map(s => {
+          const pace=Number(s.distanceM)>0?Number(s.durationSec)/(Number(s.distanceM)/1000):0;
+          const width=pace>0&&calendarValidPaces.length?Math.round(35+((calendarMaxPace-pace)/calendarPaceRange)*65):35;
+          return `<div class="grid grid-cols-[38px_58px_1fr_58px_58px] gap-2 py-1.5 border-b border-[#1e293b] last:border-0 text-[10px] items-center">
+            <span class="text-slate-300 font-semibold">${s.kmIndex}</span>
+            <span class="text-slate-400">${formatTimeSec(s.durationSec)}</span>
+            <span>${pace>0?`<div class="h-2 rounded-full bg-[#1e293b] overflow-hidden"><div class="h-full rounded-full bg-amber-400/80" style="width:${width}%"></div></div>`:'-'}</span>
+            <span class="text-amber-400 font-medium">${s.paceStr || '-'}</span>
+            
+          </div>`;
+        }).join('');
+        const splitHtml = splitRows ? `
+          <div class="mt-3 pt-3 border-t border-[#1e293b]">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[10px] font-bold text-slate-400">SPLITS</span>
+              ${splits.length > 8 ? `<span class="text-[9px] text-slate-600">แสดง 8 กม.แรก</span>` : ''}
+            </div>
+            <div class="rounded-xl bg-[#090d14] px-2">
+              <div class="grid grid-cols-[38px_58px_1fr_58px_58px] gap-2 py-1 text-[9px] text-slate-600 border-b border-[#1e293b]">
+                <span>กม.</span><span>เวลา</span><span>กราฟ</span><span>เพซ</span>
+              </div>
+              ${splitRows}
+            </div>
+          </div>
+        ` : '';
+
+        return `
+          <div class="rounded-2xl bg-[#090d14] border border-[#1e293b] overflow-hidden">
+            <div class="p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <h4 class="text-sm font-bold text-white truncate">${act.title || 'วิ่งออกกำลังกาย'}</h4>
+                    <span class="text-[8px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">${sourceLabel}</span>
+                  </div>
+                  <div class="text-[10px] text-slate-500">${formatActivityDisplayDate(act.date)}</div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button onclick="openEditActivityModal(${act.id})" class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700/40" title="แก้ไขกิจกรรม"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                  <button onclick="deleteCalendarActivity(${act.id}, '${dateStr}')" class="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10" title="ลบกิจกรรม">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2 mt-4">
+                <div><div class="text-[9px] text-slate-500">ระยะทาง</div><div class="text-lg font-black text-emerald-400 font-['Inter']">${Number(act.km || 0).toFixed(2)} <span class="text-[10px] font-medium">กม.</span></div></div>
+                <div><div class="text-[9px] text-slate-500">เวลา</div><div class="text-lg font-black text-white font-['Inter']">${act.time || '-'}</div></div>
+                <div><div class="text-[9px] text-slate-500">เพซ</div><div class="text-lg font-black text-amber-400 font-['Inter']">${act.pace || '-'}</div></div>
+              </div>
+
+              <div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 pt-3 border-t border-[#1e293b] text-[10px] text-slate-400">
+                ${act.hr ? `<span>❤️ ${act.hr} bpm</span>` : ''}
+                
+                ${act.calories ? `<span>🔥 ${Math.round(Number(act.calories))} kcal</span>` : ''}
+                ${shoe ? `<span>👟 ${shoe.name}</span>` : ''}
+              </div>
+              ${act.notes ? `<div class="mt-3 p-2.5 rounded-xl bg-[#121824] border border-[#1e293b] text-[10px] text-slate-300">📝 ${String(act.notes).replace(/[<>]/g,'')}</div>` : ''}
+
+              ${hasMap ? `<div id="${mapId}" class="w-full h-44 sm:h-52 rounded-xl overflow-hidden mt-3 border border-[#1e293b]"></div>` : ''}
+              ${splitHtml}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      container.innerHTML = content;
+      openModal("modalDayDetail");
+      lucide.createIcons();
+
+      activities.forEach(act => {
+        if (Array.isArray(act.pathCoordinates) && act.pathCoordinates.length > 1) {
+          const mapId = `dayRunMap_${act.id}`;
+          setTimeout(() => renderDayDetailMap(mapId, act.pathCoordinates), 120 + (idxSafe(act.id) * 20));
+        }
+      });
+    }
+
+    function idxSafe(id) {
+      const n = Number(id);
+      return Number.isFinite(n) ? Math.abs(n % 5) : 0;
+    }
+
+    function openEditActivityModal(actId) {
+      const act = runHistoryList.find(a => Number(a.id) === Number(actId));
+      if (!act) return;
+      document.getElementById('editActivityId').value = act.id;
+      document.getElementById('editActivityTitle').value = act.title || 'วิ่งออกกำลังกาย';
+      document.getElementById('editActivityDate').value = act.date || '';
+      document.getElementById('editActivityKm').value = Number(act.km || 0).toFixed(2);
+      document.getElementById('editActivityTime').value = act.time || '';
+      document.getElementById('editActivityPace').value = act.pace || '';
+      document.getElementById('editActivityHr').value = act.hr || '';
+      document.getElementById('editActivityCalories').value = act.calories || '';
+      document.getElementById('editActivityNotes').value = act.notes || '';
+      document.getElementById('editActivityShoe').innerHTML = `<option value="">ไม่ระบุรองเท้า</option>` + shoesList.map(s=>`<option value="${s.id}" ${Number(s.id)===Number(act.shoeId)?'selected':''}>👟 ${s.name}</option>`).join('');
+      document.getElementById('editActivitySourceText').textContent = act.source === 'strava' ? 'STRAVA' : act.source === 'gpx' ? 'GPX' : 'บันทึกเอง';
+      openModal('modalEditActivity');
+    }
+
+    document.getElementById('editActivityForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = Number(document.getElementById('editActivityId').value);
+      const act = runHistoryList.find(a => Number(a.id) === id);
+      if (!act) return;
+      const oldKm = Number(act.km)||0, oldShoeId = Number(act.shoeId)||0;
+      const newKm = Number(document.getElementById('editActivityKm').value)||0;
+      const newShoeId = Number(document.getElementById('editActivityShoe').value)||0;
+      if (oldShoeId && oldKm) { const oldShoe=shoesList.find(s=>Number(s.id)===oldShoeId); if(oldShoe) oldShoe.currentKm=Math.max(0,Math.round((Number(oldShoe.currentKm)-oldKm)*100)/100); }
+      if (newShoeId && newKm) { const newShoe=shoesList.find(s=>Number(s.id)===newShoeId); if(newShoe) newShoe.currentKm=Math.round((Number(newShoe.currentKm)+newKm)*100)/100; }
+      Object.assign(act, {
+        title: document.getElementById('editActivityTitle').value.trim() || 'วิ่งออกกำลังกาย',
+        date: document.getElementById('editActivityDate').value,
+        km: newKm,
+        time: document.getElementById('editActivityTime').value.trim() || '-',
+        pace: document.getElementById('editActivityPace').value.trim() || '-',
+        hr: Number(document.getElementById('editActivityHr').value)||null,
+        calories: Number(document.getElementById('editActivityCalories').value)||0,
+        shoeId: newShoeId || null,
+        notes: document.getElementById('editActivityNotes').value.trim()
+      });
+      syncToCloud(); renderEntireApp(); closeModal('modalEditActivity'); openDayDetailModal(act.date); showToast('แก้ไขกิจกรรมแล้ว ✓');
+    });
+
+    document.getElementById('deleteEditActivityBtn').addEventListener('click', () => {
+      const id = Number(document.getElementById('editActivityId').value); const act=runHistoryList.find(a=>Number(a.id)===id); if(!act) return;
+      if(confirm(`ลบกิจกรรม ${Number(act.km||0).toFixed(2)} กม. ใช่หรือไม่?`)) { const date=act.date; deleteCalendarActivity(id,date); closeModal('modalEditActivity'); }
+    });
+
+    function deleteRaceFromCalendar() {
+      if (confirm(`ต้องการลบงานแข่งขัน "${raceTarget.name}" ออกจากปฏิทินและเป้าหมายใช่หรือไม่?`)) {
+        raceTarget = { name: "ยังไม่มีงานแข่งเป้าหมาย", date: "", distance: 0, pace: "", timeVal: "", timeUnit: "ชม." };
+        syncToCloud();
+        renderEntireApp();
+        closeModal("modalDayDetail");
+        showToast("ลบงานแข่งขันเรียบร้อยแล้ว");
+      }
+    }
+
+    function deleteCalendarActivity(actId, dateStr) {
+      const act = runHistoryList.find(a => a.id === actId);
+      if (!act) return;
+
+      if (confirm(`ต้องการลบกิจกรรมวิ่งระยะทาง ${Number(act.km).toFixed(2)} กม. ใช่หรือไม่?`)) {
+        if (act.shoeId && act.km) {
+          const shoe = shoesList.find(s => s.id === act.shoeId);
+          if (shoe) {
+            shoe.currentKm = Math.max(0, Math.round((Number(shoe.currentKm) - Number(act.km)) * 100) / 100);
+          }
+        }
+
+        if (act.trainingPlanId) {
+          const trainItem = trainingList.find(t => t.id === act.trainingPlanId);
+          if (trainItem) {
+            trainItem.done = false;
+            trainItem.calendarActivityId = null;
+          }
+        }
+
+        runHistoryList = runHistoryList.filter(a => a.id !== actId);
+        syncToCloud();
+        renderEntireApp();
+        openDayDetailModal(dateStr);
+        showToast("ลบกิจกรรมและหักลบระยะรองเท้าคืนแล้ว");
+      }
+    }
+
+    // ----------------------------------------------------
+    // เป้าหมายงานแข่ง & To-Do & กิจวัตร & การเงิน
+    // ----------------------------------------------------
+    function renderRaceTarget() {
+      document.getElementById("raceDisplayTitle").textContent = raceTarget.name || "ยังไม่มีงานแข่งเป้าหมาย";
+      document.getElementById("raceDisplaySub").textContent = raceTarget.date ? `${raceTarget.date} • ${Number(raceTarget.distance).toFixed(2)} กม.` : "-";
+      document.getElementById("raceTargetPaceText").textContent = raceTarget.pace ? `${raceTarget.pace} นาที/กม.` : '-';
+      document.getElementById("raceTargetTimeText").textContent = raceTarget.timeVal ? `${raceTarget.timeVal} ${raceTarget.timeUnit}` : '-';
+
+      if (raceTarget.date) {
+        const p = raceTarget.date.split("-");
+        const target = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+        const now = new Date();
+        const diff = Math.ceil((target - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / (1000 * 60 * 60 * 24));
+        document.getElementById("raceDaysCountdown").textContent = diff >= 0 ? diff : 0;
+      } else {
+        document.getElementById("raceDaysCountdown").textContent = "0";
+      }
+    }
+
+    function openRaceModal() {
+      document.getElementById("raceFormName").value = raceTarget.name !== "ยังไม่มีงานแข่งเป้าหมาย" ? raceTarget.name : "";
+      document.getElementById("raceFormDate").value = raceTarget.date || "";
+      document.getElementById("raceFormDistanceNum").value = Number(raceTarget.distance).toFixed(2);
+      document.getElementById("raceFormPaceNum").value = raceTarget.pace || "";
+      document.getElementById("raceFormTimeVal").value = raceTarget.timeVal || "";
+      document.getElementById("raceFormTimeUnit").value = raceTarget.timeUnit || "ชม.";
+      openModal('modalRace');
+    }
+
+    document.getElementById("raceForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      raceTarget = {
+        name: document.getElementById("raceFormName").value.trim(),
+        date: document.getElementById("raceFormDate").value,
+        distance: parseFloat(document.getElementById("raceFormDistanceNum").value) || 0,
+        pace: document.getElementById("raceFormPaceNum").value.trim(),
+        timeVal: document.getElementById("raceFormTimeVal").value.trim(),
+        timeUnit: document.getElementById("raceFormTimeUnit").value
+      };
+      syncToCloud();
+      renderEntireApp();
+      closeModal('modalRace');
+      showToast("บันทึกเป้าหมายงานวิ่งแล้ว");
+    });
+
+    function renderTodoTabs() {
+      const container = document.getElementById("todoCategoryTabsContainer");
+      if (!todoCategories.some(c => c.id === activeTodoCat) && todoCategories.length > 0) activeTodoCat = todoCategories[0].id;
+      container.innerHTML = todoCategories.map(cat => `
+        <button onclick="selectTodoCat('${cat.id}')" class="px-4 py-2 rounded-xl font-bold flex items-center gap-1.5 flex-shrink-0 transition ${cat.id === activeTodoCat ? 'bg-white text-slate-900 shadow' : 'bg-[#121824] text-slate-400 border border-[#1e293b]'}">
+          <span>${cat.icon}</span><span>${cat.name}</span>
+        </button>
+      `).join("");
+    }
+
+    function selectTodoCat(id) { activeTodoCat = id; renderTodoTabs(); renderTodos(); }
+
+    function renderTodos() {
+      const container = document.getElementById("todoListContainer");
+      const currentList = todos.filter(t => t.categoryId === activeTodoCat);
+      
+      const badgeEl = document.getElementById("todoPendingBadge");
+      if (badgeEl) badgeEl.textContent = `${todos.filter(t => !t.done).length} ค้างอยู่`;
+
+      if (currentList.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-slate-500 text-xs">ไม่มีรายการค้างในหมวดนี้</div>`;
+        return;
+      }
+      container.innerHTML = currentList.map(t => `
+        <div class="flex items-center justify-between p-3.5 rounded-2xl bg-[#121824] border border-[#1e293b]">
+          <div onclick="toggleTodo(${t.id})" class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+            <div class="w-5 h-5 rounded-lg border ${t.done ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} flex items-center justify-center flex-shrink-0">
+              ${t.done ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white stroke-[3]"></i>' : ''}
+            </div>
+            <span class="text-xs sm:text-sm truncate ${t.done ? 'line-through text-slate-500' : 'text-slate-200'}">${t.text}</span>
+          </div>
+          <button onclick="deleteTodo(${t.id})" class="text-slate-600 hover:text-rose-400 p-1 ml-2"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+        </div>
+      `).join("");
+      lucide.createIcons();
+    }
+
+    function toggleTodo(id) { const t = todos.find(i => i.id === id); if (t) { t.done = !t.done; syncToCloud(); renderTodos(); } }
+    function deleteTodo(id) { todos = todos.filter(t => t.id !== id); syncToCloud(); renderTodos(); }
+    function addNewTodo() {
+      const input = document.getElementById("newTodoInput");
+      const val = input.value.trim();
+      if (!val || !activeTodoCat) return;
+      todos.unshift({ id: Date.now(), categoryId: activeTodoCat, text: val, done: false });
+      input.value = "";
+      syncToCloud();
+      renderTodos();
+    }
+
+    function openCategoryModal() {
+      document.getElementById("categoryManageList").innerHTML = todoCategories.map(cat => `
+        <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#090d14] border border-[#1e293b]">
+          <div class="flex items-center gap-2"><span class="text-sm">${cat.icon}</span><span class="text-xs font-semibold text-white">${cat.name}</span></div>
+          <button onclick="deleteCategory('${cat.id}')" class="text-rose-400 hover:text-rose-300 p-1"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </div>
+      `).join("");
+      lucide.createIcons();
+      openModal('modalCategory');
+    }
+
+    function deleteCategory(id) {
+      if (todoCategories.length <= 1) { alert("ต้องมีอย่างน้อย 1 หมวดหมู่ครับ"); return; }
+      if (confirm("ต้องการลบหมวดหมู่นี้ใช่หรือไม่?")) {
+        todoCategories = todoCategories.filter(c => c.id !== id);
+        todos = todos.filter(t => t.categoryId !== id);
+        syncToCloud();
+        renderEntireApp();
+        openCategoryModal();
+      }
+    }
+
+    document.getElementById("newCategoryForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const icon = document.getElementById("catIconInput").value.trim() || '📌';
+      const name = document.getElementById("catNameInput").value.trim();
+      if (!name) return;
+      const newId = 'cat_' + Date.now();
+      todoCategories.push({ id: newId, name, icon });
+      activeTodoCat = newId;
+      syncToCloud();
+      renderEntireApp();
+      openCategoryModal();
+      document.getElementById("catNameInput").value = "";
+    });
+
+    function renderRoutines() {
+      document.getElementById("dailyChecklistContainer").innerHTML = routines.map(r => `
+        <div class="flex items-center justify-between p-3 rounded-2xl bg-[#090d14] border border-[#1e293b]">
+          <div onclick="toggleRoutine(${r.id})" class="flex items-center gap-3 cursor-pointer flex-1">
+            <div class="w-5 h-5 rounded-lg border ${r.done ? 'bg-[#6ee7b7] border-[#6ee7b7]' : 'border-slate-600'} flex items-center justify-center">
+              ${r.done ? '<i data-lucide="check" class="w-3.5 h-3.5 text-[#090d14] stroke-[3]"></i>' : ''}
+            </div>
+            <span class="text-xs sm:text-sm ${r.done ? 'line-through text-slate-500' : 'text-slate-200'}">${r.text}</span>
+          </div>
+          <span class="text-[10px] text-slate-500 font-mono">${r.time}</span>
+        </div>
+      `).join("");
+      lucide.createIcons();
+    }
+    function toggleRoutine(id) { const item = routines.find(r => r.id === id); if (item) { item.done = !item.done; syncToCloud(); renderRoutines(); } }
+
+    document.getElementById("routineForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      routines.push({ id: Date.now(), text: document.getElementById("routineText").value.trim(), time: document.getElementById("routineTime").value, done: false });
+      syncToCloud();
+      renderRoutines();
+      closeModal('modalRoutine');
+      document.getElementById("routineText").value = "";
+    });
+
+    document.getElementById("quickExpenseForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      expenses.unshift({ id: Date.now(), name: document.getElementById("expName").value.trim(), amount: Number(document.getElementById("expAmount").value), category: document.getElementById("expCategory").value, date: "วันนี้" });
+      document.getElementById("expName").value = ""; document.getElementById("expAmount").value = "";
+      syncToCloud();
+      renderExpenses();
+    });
+
+    function renderExpenses() {
+      let sum = 0; expenses.forEach(e => sum += e.amount);
+      document.getElementById("todayExpenseTotal").textContent = sum.toLocaleString();
+      document.getElementById("monthExpenseTotal").textContent = `฿${(3840 + sum).toLocaleString()}`;
+      document.getElementById("recentExpenseList").innerHTML = expenses.slice(0, 3).map(e => `
+        <div class="flex items-center justify-between py-1 text-xs"><span class="text-slate-200">${e.name}</span><span class="font-bold text-white font-['Inter']">฿${e.amount}</span></div>
+      `).join("");
+    }
+
+    function renderSubs() {
+      let monthly = 0, yearly = 0;
+      subs.forEach(s => { const p = Number(s.price) || 0; if (s.cycle === 'monthly') { monthly += p; yearly += p*12; } else { yearly += p; } });
+      document.getElementById("monthlyTotalText").textContent = monthly.toLocaleString();
+      document.getElementById("yearlyEstimateText").textContent = yearly.toLocaleString();
+      document.getElementById("activeCountSummary").textContent = `${subs.length} รายการที่กำลังใช้งาน`;
+      document.getElementById("subsList").innerHTML = subs.map(s => `
+        <div class="bg-[#121824] border border-[#1e293b] rounded-2xl p-4 flex items-center justify-between">
+          <span class="text-sm font-semibold text-white">${s.name}</span>
+          <span class="text-base font-bold text-white font-['Inter']">฿${Number(s.price).toLocaleString()}</span>
+        </div>
+      `).join("");
+    }
+
+    // เริ่มต้นระบบและแสดงผลครั้งแรก
+    renderEntireApp();
+  </script>
+</body>
+</html>
